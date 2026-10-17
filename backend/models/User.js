@@ -1,7 +1,28 @@
 const mongoose = require("mongoose");
 
+const uid = () =>
+  Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+
 function createStarterBoard() {
-  return { lists: [], activeId: null, updatedAt: Date.now() };
+  const t = (s) => ({ id: uid(), text: s, done: false, starred: false });
+  const l1 = {
+    id: uid(),
+    name: "Project Links",
+    starred: false,
+    todos: [
+      t("Live Tracker Link"),
+      t("Online Project File Link"),
+      t("Presentation Deck Link"),
+    ],
+  };
+  const l2 = {
+    id: uid(),
+    name: "This Week",
+    starred: false,
+    todos: [t("Confirm venue walkthrough"), t("Send vendor shortlist")],
+  };
+  const l3 = { id: uid(), name: "Ideas", starred: false, todos: [] };
+  return { lists: [l1, l2, l3], activeId: l1.id, updatedAt: Date.now() };
 }
 
 const TodoSchema = new mongoose.Schema(
@@ -44,7 +65,7 @@ const UserSchema = new mongoose.Schema(
       required: true,
     },
     board: {
-      lists: { type: [ListSchema], default: () => [] },
+      lists: { type: [ListSchema], default: undefined },
       activeId: { type: String, default: null },
       updatedAt: { type: Number, default: () => Date.now() },
     },
