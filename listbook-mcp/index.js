@@ -487,6 +487,7 @@ async function main() {
   console.error("Listbook MCP Server running on stdio");
 }
 
+
 main().catch((err) => {
   console.error("Fatal MCP Server error:", err);
   process.exit(1);

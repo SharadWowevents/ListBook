@@ -67,6 +67,7 @@ function extractCredentials(req) {
   return { name, password };
 }
 
+
 // Board Helpers bound to a specific authenticated user's JWT token
 async function fetchBoard(token) {
   const res = await fetch(`${API_BASE}/board`, {
