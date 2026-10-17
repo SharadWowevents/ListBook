@@ -9,7 +9,8 @@
   },
   "scripts": {
     "start": "node index.js",
-    "test": "node test-mcp.js"
+    "test": "node test-mcp.js",
+    "sse": "node sse.js"
   },
   "keywords": [
     "mcp",
