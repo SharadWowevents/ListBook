@@ -44,7 +44,7 @@ const UserSchema = new mongoose.Schema(
       required: true,
     },
     board: {
-      lists: { type: [ListSchema], default: undefined },
+      lists: { type: [ListSchema], default: () => [] },
       activeId: { type: String, default: null },
       updatedAt: { type: Number, default: () => Date.now() },
     },
