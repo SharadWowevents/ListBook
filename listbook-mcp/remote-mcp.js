@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { z } from "zod";
 
@@ -13,15 +14,16 @@ const API_BASE = (process.env.LISTBOOK_API_URL || "http://127.0.0.1:5000/api").r
 const uid = () =>
   Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
-// Verify credentials directly against the User DB via the Express Auth API
+// Verify credentials directly against the User DB via Express Auth API
 async function verifyUserInDB(name, password) {
   const res = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      name: name.trim(),
-      password: password.trim(),
-      strictLogin: true, // Rejects if user does not exist or password/PIN is wrong
+      name: String(name).trim(),
+      password: String(password).trim(),
+      pin: String(password).trim(), // sends both in case backend checks 'pin'
+      strictLogin: true,
     }),
   });
 
@@ -32,43 +34,38 @@ async function verifyUserInDB(name, password) {
   return data; // { token, user: { name, key }, board }
 }
 
-// Extract credentials from Basic Auth header, custom headers, or query params
 function extractCredentials(req) {
   const authHeader = req.headers.authorization || "";
 
-  // 1. Support ChatGPT's "Token" auth field (Format: "Name:Password", e.g., "Demo:1234")
+  // 1. Bearer Token (Format: "admin:1012")
   if (authHeader.startsWith("Bearer ")) {
-    const rawToken = authHeader.slice(7).trim();
-    const sepIndex = rawToken.indexOf(":");
-    if (sepIndex !== -1) {
-      return {
-        name: rawToken.slice(0, sepIndex),
-        password: rawToken.slice(sepIndex + 1),
-      };
+    const raw = authHeader.slice(7).trim();
+    const sep = raw.indexOf(":");
+    if (sep !== -1) {
+      return { name: raw.slice(0, sep), password: raw.slice(sep + 1) };
     }
   }
 
-  // 2. Support Basic Auth header
+  // 2. Basic Auth
   if (authHeader.startsWith("Basic ")) {
     const decoded = Buffer.from(authHeader.slice(6), "base64").toString("utf8");
-    const sepIndex = decoded.indexOf(":");
-    if (sepIndex !== -1) {
-      return {
-        name: decoded.slice(0, sepIndex),
-        password: decoded.slice(sepIndex + 1),
-      };
+    const sep = decoded.indexOf(":");
+    if (sep !== -1) {
+      return { name: decoded.slice(0, sep), password: decoded.slice(sep + 1) };
     }
   }
 
-  // 3. Support URL Query Params (?name=Demo&password=1234) or Custom Headers
-  const name = req.headers["x-user-name"] || req.query.name;
-  const password = req.headers["x-user-password"] || req.query.password || req.query.pin;
+  // 3. URL Query Params (?name=admin&password=1012) or Headers
+  const name = req.headers["x-user-name"] || req.query.name || process.env.LISTBOOK_NAME;
+  const password =
+    req.headers["x-user-password"] ||
+    req.query.password ||
+    req.query.pin ||
+    process.env.LISTBOOK_PIN;
 
   return { name, password };
 }
 
-
-// Board Helpers bound to a specific authenticated user's JWT token
 async function fetchBoard(token) {
   const res = await fetch(`${API_BASE}/board`, {
     headers: { Authorization: `Bearer ${token}` },
@@ -116,27 +113,21 @@ function formatBoardSummary(board) {
     .join("\n\n");
 }
 
-// Create an isolated MCP server instance scoped to the authenticated user's token
 function createAuthenticatedMcpServer(userSession) {
   const { token, user } = userSession;
   const server = new McpServer({
-    name: `listbook-mcp (${user.name})`,
+    name: "listbook-mcp",
     version: "1.0.0",
   });
 
   server.tool(
     "get_all_lists",
-    "Read all lists and tasks for the authenticated user.",
+    "Read all lists and tasks from Listbook.",
     {},
     async () => {
       const board = await fetchBoard(token);
       return {
-        content: [
-          {
-            type: "text",
-            text: `Lists for ${user.name}:\n\n${formatBoardSummary(board)}`,
-          },
-        ],
+        content: [{ type: "text", text: `Lists for ${user.name}:\n\n${formatBoardSummary(board)}` }],
       };
     }
   );
@@ -144,34 +135,27 @@ function createAuthenticatedMcpServer(userSession) {
   server.tool(
     "get_list",
     "Get all tasks from a specific list by its name or ID.",
-    { listNameOrId: z.string() },
+    { listNameOrId: z.string().describe("Name or ID of the list") },
     async ({ listNameOrId }) => {
       const board = await fetchBoard(token);
       const list = findList(board, listNameOrId);
       if (!list) {
-        return {
-          isError: true,
-          content: [{ type: "text", text: `List "${listNameOrId}" not found.` }],
-        };
+        return { isError: true, content: [{ type: "text", text: `List "${listNameOrId}" not found.` }] };
       }
       const tasks = list.todos.length
-        ? list.todos
-            .map((t) => `- [${t.done ? "x" : " "}] ${t.starred ? "★ " : ""}${t.text} (id: ${t.id})`)
-            .join("\n")
+        ? list.todos.map((t) => `- [${t.done ? "x" : " "}] ${t.starred ? "★ " : ""}${t.text} (id: ${t.id})`).join("\n")
         : "No tasks in this list.";
-      return {
-        content: [{ type: "text", text: `### ${list.name}\n${tasks}` }],
-      };
+      return { content: [{ type: "text", text: `### ${list.name}\n${tasks}` }] };
     }
   );
 
   server.tool(
     "create_list",
-    "Create a new list with optional initial tasks.",
+    "Create a new list in Listbook with optional initial tasks.",
     {
-      name: z.string().min(1).max(60),
-      starred: z.boolean().optional().default(false),
-      initialTasks: z.array(z.string()).optional(),
+      name: z.string().min(1).max(60).describe("Name of the new list"),
+      starred: z.boolean().optional().default(false).describe("Whether to star the list"),
+      initialTasks: z.array(z.string()).optional().describe("Optional initial tasks"),
     },
     async ({ name, starred, initialTasks }) => {
       const board = await fetchBoard(token);
@@ -190,23 +174,23 @@ function createAuthenticatedMcpServer(userSession) {
       board.activeId = newList.id;
       await saveBoard(token, board);
       return {
-        content: [
-          {
-            type: "text",
-            text: `Created list "${newList.name}" with ${newList.todos.length} task(s).`,
-          },
-        ],
+        content: [{ type: "text", text: `Created list "${newList.name}" with ${newList.todos.length} task(s).` }],
       };
     }
   );
 
   server.tool(
     "add_tasks_to_list",
-    "Add tasks to a list (creates the list if missing).",
+    "Add tasks to a list (creates the list automatically if it does not exist).",
     {
-      listNameOrId: z.string(),
+      listNameOrId: z.string().describe("Target list name or ID"),
       tasks: z
-        .array(z.object({ text: z.string(), starred: z.boolean().optional() }))
+        .array(
+          z.object({
+            text: z.string().describe("Task text"),
+            starred: z.boolean().optional().describe("Star this task"),
+          })
+        )
         .min(1),
     },
     async ({ listNameOrId, tasks }) => {
@@ -226,9 +210,7 @@ function createAuthenticatedMcpServer(userSession) {
       board.activeId = list.id;
       await saveBoard(token, board);
       return {
-        content: [
-          { type: "text", text: `Added ${added.length} task(s) to "${list.name}".` },
-        ],
+        content: [{ type: "text", text: `Added ${added.length} task(s) to "${list.name}".` }],
       };
     }
   );
@@ -237,23 +219,21 @@ function createAuthenticatedMcpServer(userSession) {
     "update_task",
     "Mark a task done/undone, star/unstar it, or rename it.",
     {
-      listNameOrId: z.string(),
-      taskTextOrId: z.string(),
-      done: z.boolean().optional(),
-      starred: z.boolean().optional(),
-      newText: z.string().optional(),
+      listNameOrId: z.string().describe("List name or ID"),
+      taskTextOrId: z.string().describe("Task text or ID"),
+      done: z.boolean().optional().describe("Mark done (true) or open (false)"),
+      starred: z.boolean().optional().describe("Star or unstar task"),
+      newText: z.string().optional().describe("New text for the task"),
     },
     async ({ listNameOrId, taskTextOrId, done, starred, newText }) => {
       const board = await fetchBoard(token);
       const list = findList(board, listNameOrId);
-      if (!list)
-        return { isError: true, content: [{ type: "text", text: "List not found." }] };
+      if (!list) return { isError: true, content: [{ type: "text", text: "List not found." }] };
       const q = taskTextOrId.trim().toLowerCase();
       const todo =
         list.todos.find((t) => t.id === taskTextOrId.trim()) ||
         list.todos.find((t) => t.text.toLowerCase().includes(q));
-      if (!todo)
-        return { isError: true, content: [{ type: "text", text: "Task not found." }] };
+      if (!todo) return { isError: true, content: [{ type: "text", text: "Task not found." }] };
 
       if (typeof done === "boolean") todo.done = done;
       if (typeof starred === "boolean") todo.starred = starred;
@@ -267,27 +247,23 @@ function createAuthenticatedMcpServer(userSession) {
     "delete_item",
     "Delete a specific task from a list, or delete an entire list.",
     {
-      listNameOrId: z.string(),
-      taskTextOrId: z.string().optional(),
+      listNameOrId: z.string().describe("List name or ID"),
+      taskTextOrId: z.string().optional().describe("Task text/ID to delete (omit to delete entire list)"),
     },
     async ({ listNameOrId, taskTextOrId }) => {
       const board = await fetchBoard(token);
       const list = findList(board, listNameOrId);
-      if (!list)
-        return { isError: true, content: [{ type: "text", text: "List not found." }] };
+      if (!list) return { isError: true, content: [{ type: "text", text: "List not found." }] };
 
       if (taskTextOrId) {
         const q = taskTextOrId.trim().toLowerCase();
         const idx = list.todos.findIndex(
           (t) => t.id === taskTextOrId.trim() || t.text.toLowerCase().includes(q)
         );
-        if (idx === -1)
-          return { isError: true, content: [{ type: "text", text: "Task not found." }] };
+        if (idx === -1) return { isError: true, content: [{ type: "text", text: "Task not found." }] };
         const [removed] = list.todos.splice(idx, 1);
         await saveBoard(token, board);
-        return {
-          content: [{ type: "text", text: `Deleted task "${removed.text}".` }],
-        };
+        return { content: [{ type: "text", text: `Deleted task "${removed.text}".` }] };
       }
 
       board.lists = board.lists.filter((l) => l.id !== list.id);
@@ -303,41 +279,101 @@ function createAuthenticatedMcpServer(userSession) {
 }
 
 const app = express();
-app.use(cors());
 
-const transports = {};
+// Expose mcp-session-id for browser/ChatGPT CORS preflight
+app.use(
+  cors({
+    origin: "*",
+    exposedHeaders: ["Mcp-Session-Id", "mcp-session-id"],
+    allowedHeaders: ["Content-Type", "mcp-session-id", "Mcp-Session-Id", "Authorization", "x-user-name", "x-user-password"],
+  })
+);
 
-// Authenticate against User DB before establishing SSE MCP connection
-app.get("/mcp/sse", async (req, res) => {
+// Parse JSON bodies for Streamable HTTP POST requests (except legacy /mcp/messages which reads raw stream)
+app.use((req, res, next) => {
+  if (req.path.endsWith("/messages")) return next();
+  express.json()(req, res, next);
+});
+
+// ============================================================================
+// 1. MODERN STREAMABLE HTTP TRANSPORT (Used by ChatGPT Custom MCP Connectors)
+// Works on BOTH /mcp and /mcp/sse
+// ============================================================================
+const mcpPaths = ["/mcp", "/mcp/", "/mcp/sse", "/sse", "/"];
+
+app.post(mcpPaths, async (req, res) => {
   try {
     const { name, password } = extractCredentials(req);
     if (!name || !password) {
       return res.status(401).json({
-        error: "Authentication required. Provide your Listbook name and password/PIN.",
+        jsonrpc: "2.0",
+        error: { code: -32001, message: "Authentication required (name & password)." },
+        id: null,
       });
     }
 
-    // Check MongoDB User collection via Express API
     const userSession = await verifyUserInDB(name, password);
+    const server = createAuthenticatedMcpServer(userSession);
 
+    // Stateless Streamable HTTP transport (recommended by OpenAI for ChatGPT MCP)
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
+    });
+
+    res.on("close", () => {
+      transport.close();
+      server.close();
+    });
+
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (err) {
+    console.error("MCP POST error:", err.message);
+    if (!res.headersSent) {
+      return res.status(401).json({
+        jsonrpc: "2.0",
+        error: { code: -32001, message: err.message || "Unauthorized" },
+        id: null,
+      });
+    }
+  }
+});
+
+// ============================================================================
+// 2. LEGACY SSE TRANSPORT FALLBACK (GET /mcp/sse + POST /mcp/messages)
+// ============================================================================
+const sseTransports = {};
+
+app.get(mcpPaths, async (req, res) => {
+  try {
+    const { name, password } = extractCredentials(req);
+    if (!name || !password) {
+      return res.status(401).json({ error: "Authentication required." });
+    }
+
+    const userSession = await verifyUserInDB(name, password);
     const transport = new SSEServerTransport("/mcp/messages", res);
-    transports[transport.sessionId] = transport;
-    res.on("close", () => delete transports[transport.sessionId]);
+    sseTransports[transport.sessionId] = transport;
+    res.on("close", () => delete sseTransports[transport.sessionId]);
 
     const server = createAuthenticatedMcpServer(userSession);
     await server.connect(transport);
   } catch (err) {
-    return res.status(401).json({ error: err.message || "Unauthorized" });
+    console.error("MCP GET SSE error:", err.message);
+    if (!res.headersSent) {
+      return res.status(401).json({ error: err.message || "Unauthorized" });
+    }
   }
 });
 
-app.post("/mcp/messages", async (req, res) => {
+app.post(["/mcp/messages", "/messages"], async (req, res) => {
   const sessionId = req.query.sessionId;
-  const transport = transports[sessionId];
+  const transport = sseTransports[sessionId];
   if (!transport) return res.status(400).json({ error: "No active SSE session" });
   await transport.handlePostMessage(req, res);
 });
 
-app.listen(PORT, () =>
-  console.log(`Authenticated Listbook MCP Server running on port ${PORT}`)
-);
+app.listen(PORT, () => {
+  console.log(`Listbook MCP Server (Streamable HTTP + SSE) listening on port ${PORT}`);
+});
