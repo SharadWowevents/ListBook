@@ -5,7 +5,6 @@ const connectDB = require("./config/db");
 
 const authRoutes = require("./routes/authRoutes");
 const boardRoutes = require("./routes/boardRoutes");
-const mcpRoutes = require("./routes/mcpRoutes");
 
 const app = express();
 
@@ -19,7 +18,6 @@ app.use(express.json({ limit: "1mb" }));
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/board", boardRoutes);
-app.use("/api", mcpRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => res.json({ status: "ok" }));
