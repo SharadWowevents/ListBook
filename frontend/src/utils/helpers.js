@@ -14,25 +14,7 @@ export const ls = {
 };
 
 export function starterBoard() {
-  const t = (s) => ({ id: uid(), text: s, done: false, starred: false });
-  const l1 = {
-    id: uid(),
-    name: "Project Links",
-    starred: false,
-    todos: [
-      t("Live Tracker Link"),
-      t("Online Project File Link"),
-      t("Presentation Deck Link"),
-    ],
-  };
-  const l2 = {
-    id: uid(),
-    name: "This Week",
-    starred: false,
-    todos: [t("Confirm venue walkthrough"), t("Send vendor shortlist")],
-  };
-  const l3 = { id: uid(), name: "Ideas", starred: false, todos: [] };
-  return { lists: [l1, l2, l3], activeId: l1.id, updatedAt: Date.now() };
+  return { lists: [], activeId: null, updatedAt: Date.now() };
 }
 
 export async function sha(s) {
