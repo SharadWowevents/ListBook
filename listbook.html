@@ -1,0 +1,547 @@
+<title>Listbook</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;600;700&family=Figtree:wght@400;500;600&display=swap">
+<style>
+/* Layout: two panes like the wireframe (lists | todos); one pane at a time on phones. */
+:root{
+  --bg:#F5F6F4; --panel:#FFFFFF; --ink:#16191A; --muted:#6B7270; --line:#E2E5E2;
+  --soft:#ECEFEC; --accent:#1E6B57; --accent-ink:#FFFFFF; --star:#E2A21A; --danger:#B4412F;
+  --display:"Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --body:"Figtree", "Segoe UI", system-ui, sans-serif;
+  --r:16px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0F1211; --panel:#171B1A; --ink:#EEF1EF; --muted:#97A09C; --line:#2A302E;
+  --soft:#222826; --accent:#4FB394; --accent-ink:#08120F; --star:#F2BC45; --danger:#E5735F; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0F1211; --panel:#171B1A; --ink:#EEF1EF; --muted:#97A09C; --line:#2A302E;
+  --soft:#222826; --accent:#4FB394; --accent-ink:#08120F; --star:#F2BC45; --danger:#E5735F; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:18px;-webkit-font-smoothing:antialiased;overflow:hidden}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0;padding:0}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:10px}
+svg{display:block}
+
+/* ---------- login ---------- */
+.login{height:100%;display:grid;place-items:center;padding-block:24px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.login-card{width:100%;max-width:420px;display:flex;flex-direction:column;gap:22px}
+.brand{font-family:var(--display);font-weight:700;font-size:clamp(2.6rem,9vw,3.4rem);letter-spacing:-.03em;line-height:1}
+.brand span{color:var(--accent)}
+.tag{color:var(--muted);font-size:1.15rem;line-height:1.45;margin-top:-8px}
+.field{display:flex;flex-direction:column;gap:8px}
+.field label{font-size:.8rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.input{width:100%;font-size:1.25rem;padding:16px 18px;border-radius:14px;border:1.5px solid var(--line);background:var(--panel);outline:none}
+.input:focus{border-color:var(--accent)}
+.btn{display:flex;align-items:center;justify-content:center;gap:10px;font-size:1.2rem;font-weight:600;padding:17px 20px;border-radius:14px;background:var(--ink);color:var(--bg);width:100%}
+.btn.secondary{background:var(--soft);color:var(--ink)}
+.login-note{font-size:.95rem;color:var(--muted);line-height:1.5}
+.err{color:var(--danger);font-size:1rem;min-height:1.2em}
+.waiting{color:var(--muted);font-size:1.05rem}
+
+/* ---------- app shell ---------- */
+.app{height:100%;display:grid;grid-template-columns:minmax(300px,360px) 1fr}
+.side{background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+.main{display:flex;flex-direction:column;min-height:0;min-width:0}
+.side-head{padding-block:22px 14px;padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:20px;display:flex;flex-direction:column;gap:14px;border-bottom:1px solid var(--line)}
+.side-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.side-brand{font-family:var(--display);font-weight:700;font-size:1.6rem;letter-spacing:-.02em}
+.side-brand span{color:var(--accent)}
+.who{display:flex;align-items:center;gap:10px;font-size:.95rem;color:var(--muted);min-width:0}
+.who b{font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.link{font-size:.95rem;color:var(--muted);text-decoration:underline;text-underline-offset:3px}
+.add-list{display:flex;align-items:center;gap:12px;font-family:var(--display);font-size:1.6rem;font-weight:600;letter-spacing:-.01em;padding:8px 0;color:var(--ink)}
+.add-list .plus{width:40px;height:40px;border-radius:12px;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center}
+.new-list{display:flex;gap:8px}
+.new-list .input{font-size:1.15rem;padding:12px 14px}
+.lists{flex:1;overflow-y:auto;padding-block:10px 24px;padding-left:max(10px,env(safe-area-inset-left,0px));padding-right:10px;display:flex;flex-direction:column;gap:2px}
+.sec-label{font-size:.75rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:14px 12px 6px}
+.group{display:flex;flex-direction:column;gap:2px;min-height:4px}
+.list-row{display:flex;align-items:center;gap:6px;border-radius:14px;padding:4px 6px 4px 4px;user-select:none;-webkit-user-select:none}
+.list-row:hover{background:var(--soft)}
+.list-row.active{background:var(--soft)}
+.list-row.active .list-name{font-weight:600}
+.list-open{flex:1;min-width:0;display:flex;align-items:center;gap:12px;text-align:left;padding:14px 6px;font-size:1.4rem}
+.list-name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.count{font-size:.95rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.grip{width:28px;height:44px;display:grid;place-items:center;color:var(--muted);opacity:.45;cursor:grab;touch-action:none;flex:none}
+.grip:active{cursor:grabbing}
+.icon-btn{width:44px;height:44px;display:grid;place-items:center;border-radius:12px;color:var(--muted);flex:none}
+.icon-btn:hover{background:var(--soft);color:var(--ink)}
+.star-btn.on{color:var(--star)}
+.star-btn.on svg path{fill:currentColor}
+
+/* ---------- main pane ---------- */
+.main-head{padding-block:22px 10px;padding-left:max(20px,env(safe-area-inset-left,0px));padding-right:max(20px,env(safe-area-inset-right,0px));display:flex;align-items:flex-start;gap:8px}
+.back{display:none}
+.title-wrap{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.title{font-family:var(--display);font-weight:700;font-size:clamp(2.2rem,6vw,3rem);letter-spacing:-.03em;line-height:1.08;border:0;background:none;outline:none;width:100%;padding:0;border-radius:8px}
+.title:focus{background:var(--soft)}
+.sub{color:var(--muted);font-size:1.05rem;font-variant-numeric:tabular-nums}
+.head-actions{display:flex;gap:2px;padding-top:6px}
+.confirm{margin-left:max(20px,env(safe-area-inset-left,0px));margin-right:max(20px,env(safe-area-inset-right,0px));margin-bottom:8px;padding:14px 16px;border-radius:14px;background:var(--soft);display:flex;flex-wrap:wrap;align-items:center;gap:12px;font-size:1.05rem}
+.confirm span{flex:1;min-width:180px}
+.pill{padding:10px 16px;border-radius:999px;font-weight:600;font-size:1rem}
+.pill.danger{background:var(--danger);color:#fff}
+.pill.plain{background:var(--panel)}
+.todos{flex:1;overflow-y:auto;padding-block:6px 24px;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+.todo-inner{max-width:860px;display:flex;flex-direction:column;gap:2px}
+.todo{display:flex;align-items:center;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:6px 6px 6px 2px;margin-bottom:8px;user-select:none;-webkit-user-select:none}
+.check{width:44px;height:44px;display:grid;place-items:center;flex:none}
+.box{width:28px;height:28px;border-radius:9px;border:2px solid var(--line);display:grid;place-items:center;transition:background .15s,border-color .15s}
+.check:hover .box{border-color:var(--accent)}
+.todo.done .box{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.todo-text{flex:1;min-width:0;font-size:1.3rem;line-height:1.35;padding:10px 4px;overflow-wrap:anywhere;cursor:text}
+.todo.done .todo-text{color:var(--muted);text-decoration:line-through;text-decoration-thickness:1.5px}
+.todo-edit{flex:1;min-width:0;font-size:1.3rem;padding:8px 10px;border-radius:10px;border:1.5px solid var(--accent);background:var(--bg);outline:none}
+.del{opacity:.55}
+.todo:hover .del{opacity:1}
+.done-toggle{display:flex;align-items:center;gap:8px;font-size:.75rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:16px 10px 8px}
+.empty{padding:40px 12px;color:var(--muted);font-size:1.2rem;line-height:1.5;max-width:460px}
+.sortable-ghost{opacity:.35}
+.sortable-chosen{box-shadow:0 10px 30px rgba(0,0,0,.12)}
+.sortable-drag{opacity:.95}
+
+.composer{border-top:1px solid var(--line);background:var(--panel);padding-block:12px calc(12px + env(safe-area-inset-bottom,0px));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.composer form{max-width:860px;display:flex;gap:8px;align-items:center}
+.composer .input{font-size:1.25rem;padding:14px 16px;background:var(--bg)}
+.mic,.send{width:54px;height:54px;border-radius:14px;display:grid;place-items:center;flex:none}
+.mic{background:var(--soft)}
+.send{background:var(--ink);color:var(--bg)}
+.mic.live{background:var(--danger);color:#fff;animation:pulse 1.2s ease-in-out infinite}
+@keyframes pulse{50%{box-shadow:0 0 0 8px color-mix(in srgb,var(--danger) 25%,transparent)}}
+.hint{max-width:860px;font-size:.95rem;color:var(--muted);min-height:0;padding-top:6px}
+.hint:empty{display:none}
+
+.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:14px 18px;border-radius:14px;font-size:1rem;max-width:min(520px,calc(100% - 32px));z-index:20;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+
+/* ---------- phone ---------- */
+@media (max-width:760px){
+  .app{grid-template-columns:1fr}
+  .side{border-right:0}
+  .app.viewing .side{display:none}
+  .app:not(.viewing) .main{display:none}
+  .back{display:grid;margin-left:-10px;margin-top:4px}
+  .side-head{padding-right:max(16px,env(safe-area-inset-right,0px))}
+  .lists{padding-right:max(10px,env(safe-area-inset-right,0px))}
+  .list-open{font-size:1.5rem}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div id="root"></div>
+<div id="toast" class="toast" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+<script>
+(() => {
+"use strict";
+const $ = (s, el = document) => el.querySelector(s);
+const root = $("#root");
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
+const ls = {
+  get(k){ try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k,v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  del(k){ try { localStorage.removeItem(k); } catch {} }
+};
+
+const I = {
+  plus:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+  star:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.9L12 16.9l-5.2 2.8 1-5.9-4.3-4.1 5.9-.8z"/></svg>',
+  grip:'<svg width="14" height="22" viewBox="0 0 14 22" fill="currentColor"><circle cx="4" cy="5" r="1.8"/><circle cx="10" cy="5" r="1.8"/><circle cx="4" cy="11" r="1.8"/><circle cx="10" cy="11" r="1.8"/><circle cx="4" cy="17" r="1.8"/><circle cx="10" cy="17" r="1.8"/></svg>',
+  check:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  x:'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  mic:'<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0013 0M12 17.5V21"/></svg>',
+  back:'<svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>',
+  trash:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+  chev:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M9 6l6 6-6 6"/></svg>',
+  chevDown:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>'
+};
+
+function starterBoard(){
+  const t = s => ({ id: uid(), text: s, done: false, starred: false });
+  const l1 = { id: uid(), name: "Project Links", starred: false, todos: [t("Live Tracker Link"), t("Online Project File Link"), t("Presentation Deck Link")] };
+  const l2 = { id: uid(), name: "This Week", starred: false, todos: [t("Confirm venue walkthrough"), t("Send vendor shortlist")] };
+  const l3 = { id: uid(), name: "Ideas", starred: false, todos: [] };
+  return { lists: [l1, l2, l3], activeId: l1.id, updatedAt: Date.now() };
+}
+
+/* ---------- toast ---------- */
+let toastTimer;
+function toast(msg, ms = 3200){
+  const el = $("#toast"); el.textContent = msg; el.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.hidden = true, ms);
+}
+
+/* ---------- storage backends ---------- */
+// Cloud: claude.ai account + private per-person document. Local: name + PIN on this device.
+const S = { mode: null, db: null, user: null, ref: null, unsub: null, localKey: null, name: "" };
+let board = null, saveTimer = null, saving = false, dirty = false;
+
+function persist(){
+  board.updatedAt = Date.now();
+  if (S.mode === "local") { ls.set(S.localKey, board); return; }
+  ls.set("listbook:cache:" + S.uidKey, board);
+  dirty = true;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flush, 500);
+}
+async function flush(){
+  if (!dirty || saving || !S.ref) return;
+  saving = true; dirty = false;
+  try { await S.ref.set(JSON.parse(JSON.stringify(board))); }
+  catch (e) { toast("Couldn't save to your account. Changes are kept on this device for now."); }
+  saving = false;
+  if (dirty) flush();
+}
+
+/* ---------- login screens ---------- */
+let claudeUser = null, claudeDb = null, probeDone = false;
+
+function renderLoginShell(inner){
+  root.innerHTML = `<div class="login"><div class="login-card">
+    <div><div class="brand">List<span>book</span></div></div>
+    <p class="tag">Lists and todos in the order you want them. Star what matters and it stays on top.</p>
+    ${inner}</div></div>`;
+}
+
+async function showLogin(){
+  if (!probeDone) {
+    renderLoginShell(`<p class="waiting">Checking your account…</p>`);
+    return;
+  }
+  if (claudeUser && claudeDb) {
+    const me = await claudeUser.me();
+    const name = me.name || "your Claude account";
+    renderLoginShell(`
+      <button class="btn" id="cloudGo">Continue as ${esc(name)}</button>
+      <p class="login-note">You sign in with your Claude account. Your lists are private to you and sync across your phone and laptop.</p>
+      <button class="link" id="useLocal" style="align-self:flex-start">Use a device-only login instead</button>`);
+    $("#cloudGo").onclick = () => startCloud(name);
+    $("#useLocal").onclick = showLocalLogin;
+  } else showLocalLogin();
+}
+
+async function sha(s){
+  try {
+    const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s));
+    return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join("");
+  } catch { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) | 0; return "h" + h; }
+}
+
+function showLocalLogin(){
+  renderLoginShell(`
+    <form id="lf" style="display:flex;flex-direction:column;gap:16px" autocomplete="off">
+      <div class="field"><label for="lname">Name</label><input class="input" id="lname" required maxlength="40" placeholder="e.g. Sachin"></div>
+      <div class="field"><label for="lpin">4-digit PIN</label><input class="input" id="lpin" required inputmode="numeric" pattern="[0-9]{4}" maxlength="4" type="password" placeholder="••••"></div>
+      <div class="err" id="lerr"></div>
+      <button class="btn" type="submit">Sign in</button>
+      <p class="login-note">New name? A new account is created on this device with that PIN. Lists saved this way stay on this device only.</p>
+      ${claudeUser && claudeDb ? '<button type="button" class="link" id="backCloud" style="align-self:flex-start">Use my Claude account instead</button>' : ""}
+    </form>`);
+  if ($("#backCloud")) $("#backCloud").onclick = showLogin;
+  $("#lf").onsubmit = async e => {
+    e.preventDefault();
+    const name = $("#lname").value.trim(), pin = $("#lpin").value.trim();
+    if (!/^\d{4}$/.test(pin)) { $("#lerr").textContent = "PIN must be 4 digits."; return; }
+    const accounts = ls.get("listbook:accounts") || {};
+    const key = name.toLowerCase();
+    const h = await sha(key + ":" + pin);
+    if (accounts[key] && accounts[key] !== h) { $("#lerr").textContent = "That PIN doesn't match this name. Try again."; return; }
+    if (!accounts[key]) { accounts[key] = h; ls.set("listbook:accounts", accounts); }
+    ls.set("listbook:session", { mode: "local", key, name });
+    startLocal(key, name);
+  };
+  $("#lname").focus();
+}
+
+function startLocal(key, name){
+  S.mode = "local"; S.localKey = "listbook:board:" + key; S.name = name;
+  board = ls.get(S.localKey) || starterBoard();
+  ls.set(S.localKey, board);
+  renderApp();
+}
+
+async function startCloud(name){
+  S.mode = "cloud"; S.name = name;
+  const id = await claudeUser.id();
+  if (!id) { toast("Your account can't save here. Using a device-only login."); showLocalLogin(); return; }
+  S.uidKey = id;
+  S.ref = claudeDb.doc("data/users/" + id + "/board");
+  ls.set("listbook:session", { mode: "cloud" });
+  const cached = ls.get("listbook:cache:" + id);
+  board = cached || null;
+  if (board) renderApp(); else renderLoginShell(`<p class="waiting">Loading your lists…</p>`);
+  let first = true;
+  S.unsub = S.ref.onSnapshot(snap => {
+    if (snap.metadata && snap.metadata.hasPendingWrites) return;
+    if (!snap.exists) {
+      if (first) { board = board || starterBoard(); renderApp(); persist(); }
+      first = false; return;
+    }
+    const data = snap.data();
+    first = false;
+    if (dirty || saving) return;
+    if (!board || (data.updatedAt || 0) > (board.updatedAt || 0)) {
+      board = data; ls.set("listbook:cache:" + id, board);
+      if (!isEditing()) renderApp();
+    }
+  }, () => { if (!board) { board = starterBoard(); renderApp(); } toast("Couldn't reach your saved lists. Working offline."); });
+}
+
+function signOut(){
+  if (S.unsub) S.unsub();
+  flush();
+  ls.del("listbook:session");
+  Object.assign(S, { mode: null, ref: null, unsub: null, localKey: null });
+  board = null; showLogin();
+}
+
+/* ---------- app ---------- */
+const UI = { viewing: false, adding: false, showDone: true, confirm: false };
+let sortables = [];
+const active = () => board.lists.find(l => l.id === board.activeId) || board.lists[0] || null;
+const isEditing = () => document.activeElement && /INPUT/.test(document.activeElement.tagName) && document.activeElement.id !== "";
+
+function reorderSubset(arr, ids){
+  // Put the items with these ids back into the slots they occupied, in the new order.
+  const set = new Set(ids), slots = [];
+  arr.forEach((x, i) => { if (set.has(x.id)) slots.push(i); });
+  const byId = Object.fromEntries(arr.map(x => [x.id, x]));
+  const out = arr.slice();
+  slots.forEach((slot, k) => out[slot] = byId[ids[k]]);
+  return out;
+}
+
+function renderApp(){
+  if (!board) return;
+  if (!board.lists.find(l => l.id === board.activeId)) board.activeId = board.lists[0] ? board.lists[0].id : null;
+  const a = active();
+  const starredLists = board.lists.filter(l => l.starred), otherLists = board.lists.filter(l => !l.starred);
+  const listRow = l => {
+    const open = l.todos.filter(t => !t.done).length;
+    return `<div class="list-row ${l.id === board.activeId ? "active" : ""}" data-id="${l.id}">
+      <span class="grip" aria-hidden="true">${I.grip}</span>
+      <button class="list-open" data-open="${l.id}"><span class="list-name">${esc(l.name)}</span><span class="count">${open || ""}</span></button>
+      <button class="icon-btn star-btn ${l.starred ? "on" : ""}" data-star-list="${l.id}" aria-label="${l.starred ? "Unstar" : "Star"} ${esc(l.name)}">${I.star}</button>
+    </div>`;
+  };
+
+  let mainHtml = "";
+  if (a) {
+    const sOpen = a.todos.filter(t => !t.done && t.starred), open = a.todos.filter(t => !t.done && !t.starred), done = a.todos.filter(t => t.done);
+    const todoRow = t => `<div class="todo ${t.done ? "done" : ""}" data-id="${t.id}">
+        <button class="check" data-check="${t.id}" aria-label="${t.done ? "Mark not done" : "Mark done"}"><span class="box">${t.done ? I.check : ""}</span></button>
+        <span class="todo-text" data-edit="${t.id}">${esc(t.text)}</span>
+        <button class="icon-btn star-btn ${t.starred ? "on" : ""}" data-star="${t.id}" aria-label="${t.starred ? "Unstar" : "Star"}">${I.star}</button>
+        <button class="icon-btn del" data-del="${t.id}" aria-label="Delete todo">${I.x}</button>
+      </div>`;
+    const total = a.todos.length;
+    mainHtml = `
+      <div class="main-head">
+        <button class="icon-btn back" id="back" aria-label="Back to lists">${I.back}</button>
+        <div class="title-wrap">
+          <input class="title" id="listTitle" value="${esc(a.name)}" aria-label="List name" maxlength="60">
+          <div class="sub">${total ? `${total - done.length} open · ${done.length} done` : "No todos yet"}</div>
+        </div>
+        <div class="head-actions">
+          <button class="icon-btn star-btn ${a.starred ? "on" : ""}" data-star-list="${a.id}" aria-label="Star list">${I.star}</button>
+          <button class="icon-btn" id="askDelete" aria-label="Delete list">${I.trash}</button>
+        </div>
+      </div>
+      ${UI.confirm ? `<div class="confirm"><span>Delete “${esc(a.name)}” and its ${total} todo${total === 1 ? "" : "s"}?</span>
+        <button class="pill plain" id="cancelDel">Keep</button><button class="pill danger" id="doDel">Delete list</button></div>` : ""}
+      <div class="todos"><div class="todo-inner">
+        ${!total ? `<p class="empty">Nothing here yet. Type below or tap the mic and say your first todo.</p>` : ""}
+        ${sOpen.length ? `<div class="sec-label">Starred</div>` : ""}
+        <div class="group" data-group="todo-starred">${sOpen.map(todoRow).join("")}</div>
+        ${sOpen.length && open.length ? `<div class="sec-label">Todos</div>` : ""}
+        <div class="group" data-group="todo-open">${open.map(todoRow).join("")}</div>
+        ${done.length ? `<button class="done-toggle" id="toggleDone">${UI.showDone ? I.chevDown : I.chev} Done · ${done.length}</button>
+          ${UI.showDone ? `<div class="group" data-group="todo-done">${done.map(todoRow).join("")}</div>` : ""}` : ""}
+      </div></div>
+      <div class="composer">
+        <form id="addForm" autocomplete="off">
+          <input class="input" id="newTodo" placeholder="Add todo" maxlength="300" aria-label="Add todo">
+          <button type="button" class="mic" id="mic" aria-label="Add todo by voice">${I.mic}</button>
+          <button type="submit" class="send" aria-label="Add">${I.plus}</button>
+        </form>
+        <div class="hint" id="hint"></div>
+      </div>`;
+  } else {
+    mainHtml = `<div class="main-head"><button class="icon-btn back" id="back" aria-label="Back to lists">${I.back}</button></div><p class="empty" style="padding-left:24px">Create a list to get started.</p>`;
+  }
+
+  const prevScroll = $(".todos") ? $(".todos").scrollTop : 0;
+  const prevListScroll = $(".lists") ? $(".lists").scrollTop : 0;
+  root.innerHTML = `<div class="app ${UI.viewing ? "viewing" : ""}">
+    <aside class="side">
+      <div class="side-head">
+        <div class="side-top">
+          <div class="side-brand">List<span>book</span></div>
+          <div class="who"><b>${esc(S.name)}</b><button class="link" id="signout">Sign out</button></div>
+        </div>
+        ${UI.adding
+          ? `<form class="new-list" id="newListForm" autocomplete="off"><input class="input" id="newListName" placeholder="List name" maxlength="60" aria-label="New list name"><button class="send" type="submit" aria-label="Create list">${I.plus}</button></form>`
+          : `<button class="add-list" id="addList"><span class="plus">${I.plus}</span>Add List</button>`}
+      </div>
+      <div class="lists">
+        ${starredLists.length ? `<div class="sec-label">Starred</div>` : ""}
+        <div class="group" data-group="list-starred">${starredLists.map(listRow).join("")}</div>
+        ${starredLists.length && otherLists.length ? `<div class="sec-label">Lists</div>` : ""}
+        <div class="group" data-group="list-other">${otherLists.map(listRow).join("")}</div>
+      </div>
+    </aside>
+    <main class="main">${mainHtml}</main>
+  </div>`;
+  if ($(".todos")) $(".todos").scrollTop = prevScroll;
+  $(".lists").scrollTop = prevListScroll;
+  wire();
+}
+
+function wire(){
+  sortables.forEach(s => s.destroy()); sortables = [];
+  const opts = { animation: 160, delay: 180, delayOnTouchOnly: true, touchStartThreshold: 6, filter: ".todo-edit", preventOnFilter: false, ghostClass: "sortable-ghost", chosenClass: "sortable-chosen", dragClass: "sortable-drag" };
+  document.querySelectorAll("[data-group^='list-']").forEach(g => {
+    sortables.push(Sortable.create(g, { ...opts, onEnd(){ const ids = [...g.children].map(c => c.dataset.id); board.lists = reorderSubset(board.lists, ids); persist(); renderApp(); } }));
+  });
+  document.querySelectorAll("[data-group^='todo-']").forEach(g => {
+    sortables.push(Sortable.create(g, { ...opts, onEnd(){ const a = active(); const ids = [...g.children].map(c => c.dataset.id); a.todos = reorderSubset(a.todos, ids); persist(); renderApp(); } }));
+  });
+
+  $("#signout").onclick = signOut;
+  if ($("#addList")) $("#addList").onclick = () => { UI.adding = true; renderApp(); $("#newListName").focus(); };
+  if ($("#newListForm")) {
+    const inp = $("#newListName");
+    $("#newListForm").onsubmit = e => {
+      e.preventDefault();
+      const name = inp.value.trim();
+      UI.adding = false;
+      if (name) { const l = { id: uid(), name, starred: false, todos: [] }; board.lists.push(l); board.activeId = l.id; UI.viewing = true; persist(); }
+      renderApp();
+      if (name && $("#newTodo")) $("#newTodo").focus();
+    };
+    inp.onblur = () => setTimeout(() => { if (UI.adding && !inp.value.trim()) { UI.adding = false; renderApp(); } }, 150);
+    inp.onkeydown = e => { if (e.key === "Escape") { UI.adding = false; renderApp(); } };
+  }
+
+  root.onclick = e => {
+    const t = e.target.closest("button,[data-edit]"); if (!t) return;
+    const d = t.dataset, a = active();
+    if (d.open) { board.activeId = d.open; UI.viewing = true; UI.confirm = false; persist(); renderApp(); }
+    else if (d.starList) { const l = board.lists.find(x => x.id === d.starList); l.starred = !l.starred; persist(); renderApp(); }
+    else if (d.check) { const x = a.todos.find(x => x.id === d.check); x.done = !x.done; persist(); renderApp(); }
+    else if (d.star) { const x = a.todos.find(x => x.id === d.star); x.starred = !x.starred; persist(); renderApp(); }
+    else if (d.del) { const i = a.todos.findIndex(x => x.id === d.del); const [gone] = a.todos.splice(i, 1); lastDeleted = { listId: a.id, todo: gone, index: i }; persist(); renderApp(); undoToast(); }
+    else if (d.edit) startEdit(t);
+    else if (t.id === "back") { UI.viewing = false; UI.confirm = false; renderApp(); }
+    else if (t.id === "askDelete") { UI.confirm = true; renderApp(); }
+    else if (t.id === "cancelDel") { UI.confirm = false; renderApp(); }
+    else if (t.id === "doDel") { board.lists = board.lists.filter(l => l.id !== a.id); UI.confirm = false; UI.viewing = false; persist(); renderApp(); toast("List deleted."); }
+    else if (t.id === "toggleDone") { UI.showDone = !UI.showDone; renderApp(); }
+    else if (t.id === "mic") toggleVoice();
+  };
+
+  const title = $("#listTitle");
+  if (title) {
+    title.onkeydown = e => { if (e.key === "Enter") title.blur(); };
+    title.onchange = () => { const v = title.value.trim(); const a = active(); if (v && v !== a.name) { a.name = v; persist(); } renderApp(); };
+  }
+  const form = $("#addForm");
+  if (form) form.onsubmit = e => { e.preventDefault(); addTodo($("#newTodo").value); $("#newTodo").focus(); };
+}
+
+let lastDeleted = null;
+function undoToast(){
+  const el = $("#toast");
+  el.innerHTML = `Todo deleted. <button class="link" id="undo" style="color:inherit;margin-left:8px">Undo</button>`;
+  el.hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => el.hidden = true, 5000);
+  $("#undo").onclick = () => {
+    if (!lastDeleted) return;
+    const l = board.lists.find(x => x.id === lastDeleted.listId);
+    if (l) { l.todos.splice(lastDeleted.index, 0, lastDeleted.todo); persist(); renderApp(); }
+    lastDeleted = null; el.hidden = true;
+  };
+}
+
+function addTodo(text){
+  text = (text || "").trim(); if (!text) return;
+  const a = active(); if (!a) return;
+  a.todos.push({ id: uid(), text, done: false, starred: false });
+  persist(); renderApp();
+  const box = $(".todos"); if (box) box.scrollTop = box.scrollHeight;
+}
+
+function startEdit(span){
+  const a = active(), item = a.todos.find(x => x.id === span.dataset.edit);
+  const inp = document.createElement("input");
+  inp.className = "todo-edit"; inp.id = "edit-" + item.id; inp.value = item.text; inp.maxLength = 300;
+  span.replaceWith(inp); inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
+  let done = false;
+  const commit = save => { if (done) return; done = true; const v = inp.value.trim(); if (save && v && v !== item.text) { item.text = v; persist(); } renderApp(); };
+  inp.onkeydown = e => { if (e.key === "Enter") commit(true); if (e.key === "Escape") commit(false); };
+  inp.onblur = () => commit(true);
+}
+
+/* ---------- voice ---------- */
+let rec = null, listening = false;
+function toggleVoice(){
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast("Voice input isn't supported in this browser. Try Chrome or Safari."); return; }
+  if (listening && rec) { rec.stop(); return; }
+  rec = new SR();
+  rec.lang = navigator.language && navigator.language.startsWith("en") ? navigator.language : "en-IN";
+  rec.interimResults = true; rec.continuous = false; rec.maxAlternatives = 1;
+  const hint = $("#hint"), input = $("#newTodo");
+  let finalText = "";
+  rec.onstart = () => { listening = true; $("#mic").classList.add("live"); hint.textContent = "Listening… say your todo."; };
+  rec.onresult = ev => {
+    let interim = "";
+    for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      const r = ev.results[i];
+      if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
+    }
+    input.value = (finalText + interim).trim();
+  };
+  rec.onerror = ev => {
+    const m = { "not-allowed": "Microphone access is blocked here. Allow the mic, or open Listbook in Chrome or Safari directly to use voice.",
+      "service-not-allowed": "Microphone access is blocked here. Open Listbook in Chrome or Safari directly to use voice.",
+      "no-speech": "Didn't catch that. Tap the mic and try again.", "audio-capture": "No microphone found.",
+      "network": "Voice needs an internet connection." }[ev.error] || "Voice input stopped. Try again.";
+    toast(m, 5000);
+  };
+  rec.onend = () => {
+    listening = false;
+    const mic = $("#mic"); if (mic) mic.classList.remove("live");
+    const h = $("#hint"); if (h) h.textContent = "";
+    const text = finalText.trim();
+    if (text) { const t = text.charAt(0).toUpperCase() + text.slice(1); addTodo(t); toast("Added: " + t, 2200); }
+  };
+  try { rec.start(); } catch { toast("Couldn't start the microphone. Try again."); }
+}
+
+/* ---------- boot ---------- */
+async function boot(){
+  const sess = ls.get("listbook:session");
+  if (sess && sess.mode === "local") { startLocal(sess.key, sess.name); }
+  else showLogin();
+
+  if (!window.claude || !window.claude.use) { probeDone = true; if (!S.mode) showLocalLogin(); return; }
+  try {
+    const [u, d] = await Promise.all([window.claude.use("user"), window.claude.use("db")]);
+    claudeUser = u; claudeDb = d;
+  } catch {}
+  probeDone = true;
+  if (S.mode) return;
+  if (sess && sess.mode === "cloud" && claudeUser && claudeDb) {
+    const me = await claudeUser.me(); startCloud(me.name || "You");
+  } else showLogin();
+}
+window.addEventListener("beforeunload", flush);
+document.addEventListener("visibilitychange", () => { if (document.hidden) flush(); });
+boot();
+})();
+</script>
