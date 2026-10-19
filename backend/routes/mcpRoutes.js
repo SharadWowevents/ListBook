@@ -679,21 +679,16 @@ function renderSuccessPage({ user, token, req }) {
 router.get(
   [
     "/.well-known/oauth-authorization-server",
-    "/.well-known/oauth-authorization-server/*",
     "/.well-known/openid-configuration",
-    "/.well-known/openid-configuration/*",
   ],
   getDiscoveryMetadata
 );
 router.get(
-  [
-    "/.well-known/oauth-protected-resource",
-    "/.well-known/oauth-protected-resource/*",
-  ],
+  "/.well-known/oauth-protected-resource",
   getProtectedResourceMetadata
 );
 
-router.post("/register", registrationHandler);
+router.post(["/register", "/api/mcp/register"], registrationHandler);
 
 // GET /api/mcp and /api/mcp/authorize:
 // - If browser request without bearer token: renders the Login Form!
