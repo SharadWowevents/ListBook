@@ -3,6 +3,7 @@ import { Icons } from "./Icons";
 import SortableGroup from "./SortableGroup";
 import TodoItem from "./TodoItem";
 import Composer from "./Composer";
+import LogWindow from "./LogWindow";
 
 export default function MainPane({
   activeList,
@@ -21,9 +22,12 @@ export default function MainPane({
   onReorderTodos,
   showToast,
   composerInputRef,
+  logs = [],
+  onClearLogs,
 }) {
   const [titleText, setTitleText] = useState(activeList?.name || "");
   const [showDone, setShowDone] = useState(true);
+  const [showLogWindow, setShowLogWindow] = useState(true);
   const todosContainerRef = useRef(null);
 
   useEffect(() => {
@@ -148,6 +152,14 @@ export default function MainPane({
             <Icons.Star />
           </button>
           <button
+            className={`icon-btn log-toggle-btn ${showLogWindow ? "active" : ""}`}
+            onClick={() => setShowLogWindow((prev) => !prev)}
+            aria-label={showLogWindow ? "Hide activity log" : "Show activity log"}
+            title={showLogWindow ? "Hide activity log" : "Show activity log"}
+          >
+            <Icons.Activity />
+          </button>
+          <button
             className="icon-btn"
             onClick={() => setConfirmDelete(true)}
             aria-label={isOwner ? "Delete list" : "Leave list"}
@@ -182,54 +194,64 @@ export default function MainPane({
         </div>
       )}
 
-      <div className="todos" ref={todosContainerRef}>
-        <div className="todo-inner">
-          {!total && (
-            <p className="empty">
-              {isReadOnly
-                ? "No tasks in this list yet."
-                : "Nothing here yet. Type below or tap the mic and say your first todo."}
-            </p>
-          )}
+      <div className="main-split-wrap">
+        <div className="todos-col" ref={todosContainerRef}>
+          <div className="todo-inner">
+            {!total && (
+              <p className="empty">
+                {isReadOnly
+                  ? "No tasks in this list yet."
+                  : "Nothing here yet. Type below or tap the mic and say your first todo."}
+              </p>
+            )}
 
-          {sOpen.length > 0 && <div className="sec-label">Starred</div>}
-          <SortableGroup
-            groupName="todo-starred"
-            onReorder={isReadOnly ? () => {} : onReorderTodos}
-          >
-            {sOpen.map(renderTodo)}
-          </SortableGroup>
+            {sOpen.length > 0 && <div className="sec-label">Starred</div>}
+            <SortableGroup
+              groupName="todo-starred"
+              onReorder={isReadOnly ? () => {} : onReorderTodos}
+            >
+              {sOpen.map(renderTodo)}
+            </SortableGroup>
 
-          {sOpen.length > 0 && open.length > 0 && (
-            <div className="sec-label">Todos</div>
-          )}
-          <SortableGroup
-            groupName="todo-open"
-            onReorder={isReadOnly ? () => {} : onReorderTodos}
-          >
-            {open.map(renderTodo)}
-          </SortableGroup>
+            {sOpen.length > 0 && open.length > 0 && (
+              <div className="sec-label">Todos</div>
+            )}
+            <SortableGroup
+              groupName="todo-open"
+              onReorder={isReadOnly ? () => {} : onReorderTodos}
+            >
+              {open.map(renderTodo)}
+            </SortableGroup>
 
-          {done.length > 0 && (
-            <>
-              <button
-                className="done-toggle"
-                onClick={() => setShowDone((prev) => !prev)}
-              >
-                {showDone ? <Icons.ChevDown /> : <Icons.Chev />} Done ·{" "}
-                {done.length}
-              </button>
-              {showDone && (
-                <SortableGroup
-                  groupName="todo-done"
-                  onReorder={isReadOnly ? () => {} : onReorderTodos}
+            {done.length > 0 && (
+              <>
+                <button
+                  className="done-toggle"
+                  onClick={() => setShowDone((prev) => !prev)}
                 >
-                  {done.map(renderTodo)}
-                </SortableGroup>
-              )}
-            </>
-          )}
+                  {showDone ? <Icons.ChevDown /> : <Icons.Chev />} Done ·{" "}
+                  {done.length}
+                </button>
+                {showDone && (
+                  <SortableGroup
+                    groupName="todo-done"
+                    onReorder={isReadOnly ? () => {} : onReorderTodos}
+                  >
+                    {done.map(renderTodo)}
+                  </SortableGroup>
+                )}
+              </>
+            )}
+          </div>
         </div>
+
+        <LogWindow
+          list={activeList}
+          logs={logs}
+          onClearLogs={onClearLogs}
+          isOpen={showLogWindow}
+          onClose={() => setShowLogWindow(false)}
+        />
       </div>
 
       {!isReadOnly ? (

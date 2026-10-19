@@ -24,6 +24,36 @@ export default function App() {
   const [toastState, setToastState] = useState(null);
   const [sharingList, setSharingList] = useState(null);
   const [sharedInfo, setSharedInfo] = useState(null);
+  const [logs, setLogs] = useState(() => ls.get("listbook:activity_logs") || []);
+
+  const addLog = useCallback(
+    (listId, type, text, detail = "") => {
+      if (!listId) return;
+      setLogs((prev) => {
+        const entry = {
+          id: uid(),
+          listId,
+          type,
+          text,
+          detail,
+          timestamp: Date.now(),
+          user: userName || "You",
+        };
+        const next = [entry, ...(prev || [])].slice(0, 150);
+        ls.set("listbook:activity_logs", next);
+        return next;
+      });
+    },
+    [userName]
+  );
+
+  const handleClearLogs = useCallback((listId) => {
+    setLogs((prev) => {
+      const remaining = listId ? prev.filter((l) => l.listId !== listId) : [];
+      ls.set("listbook:activity_logs", remaining);
+      return remaining;
+    });
+  }, []);
 
   const syncRef = useRef({
     token: null,
@@ -299,6 +329,7 @@ export default function App() {
       lists: [...prev.lists, newList],
       activeId: newList.id,
     }));
+    addLog(newList.id, "add", `Created list "${name}"`);
     setTimeout(() => composerInputRef.current?.focus(), 0);
   };
 
@@ -314,6 +345,7 @@ export default function App() {
       ...prev,
       lists: prev.lists.map((l) => (l.id === id ? { ...l, name } : l)),
     }));
+    addLog(id, "edit", `Renamed list to "${name}"`);
   };
 
   const handleDeleteList = async (id) => {
@@ -333,6 +365,8 @@ export default function App() {
         console.warn("Could not notify server on leave list:", err);
       }
     }
+
+    addLog(id, "delete", `Deleted list "${target?.name || id}"`);
 
     updateBoard((prev) => {
       const remaining = prev.lists.filter((l) => l.id !== id);
@@ -354,10 +388,22 @@ export default function App() {
         l.id === activeList.id ? { ...l, todos: [...l.todos, newTodo] } : l
       ),
     }));
+    addLog(activeList.id, "add", `Added: "${text}"`);
   };
 
   const handleToggleTodoDone = (todoId) => {
     if (!activeList) return;
+    const targetTodo = activeList.todos.find((t) => t.id === todoId);
+    if (targetTodo) {
+      const willBeDone = !targetTodo.done;
+      addLog(
+        activeList.id,
+        willBeDone ? "complete" : "uncomplete",
+        willBeDone
+          ? `Completed "${targetTodo.text}"`
+          : `Marked "${targetTodo.text}" as open`
+      );
+    }
     updateBoard((prev) => ({
       ...prev,
       lists: prev.lists.map((l) =>
@@ -375,6 +421,17 @@ export default function App() {
 
   const handleToggleTodoStar = (todoId) => {
     if (!activeList) return;
+    const targetTodo = activeList.todos.find((t) => t.id === todoId);
+    if (targetTodo) {
+      const willBeStarred = !targetTodo.starred;
+      addLog(
+        activeList.id,
+        willBeStarred ? "star" : "unstar",
+        willBeStarred
+          ? `Starred "${targetTodo.text}"`
+          : `Unstarred "${targetTodo.text}"`
+      );
+    }
     updateBoard((prev) => ({
       ...prev,
       lists: prev.lists.map((l) =>
@@ -392,6 +449,10 @@ export default function App() {
 
   const handleEditTodo = (todoId, text) => {
     if (!activeList) return;
+    const targetTodo = activeList.todos.find((t) => t.id === todoId);
+    if (targetTodo && targetTodo.text !== text) {
+      addLog(activeList.id, "edit", `Edited: "${text}"`);
+    }
     updateBoard((prev) => ({
       ...prev,
       lists: prev.lists.map((l) =>
@@ -413,6 +474,8 @@ export default function App() {
     const idx = activeList.todos.findIndex((t) => t.id === todoId);
     if (idx === -1) return;
     const deletedTodo = activeList.todos[idx];
+
+    addLog(listId, "delete", `Deleted: "${deletedTodo.text}"`);
 
     updateBoard((prev) => ({
       ...prev,
@@ -439,6 +502,7 @@ export default function App() {
 
   const handleReorderTodos = (ids) => {
     if (!activeList) return;
+    addLog(activeList.id, "reorder", "Reordered tasks in list");
     updateBoard((prev) => ({
       ...prev,
       lists: prev.lists.map((l) =>
@@ -483,6 +547,8 @@ export default function App() {
           onReorderTodos={handleReorderTodos}
           showToast={showToast}
           composerInputRef={composerInputRef}
+          logs={logs.filter((l) => l.listId === activeList?.id)}
+          onClearLogs={() => handleClearLogs(activeList?.id)}
         />
       </div>
 
