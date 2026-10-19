@@ -22,9 +22,13 @@ app.use(express.urlencoded({ extended: true }));
 app.get(
   [
     "/.well-known/oauth-authorization-server",
+    "/.well-known/oauth-authorization-server/*path",
     "/.well-known/openid-configuration",
+    "/.well-known/openid-configuration/*path",
     "/api/.well-known/oauth-authorization-server",
+    "/api/.well-known/oauth-authorization-server/*path",
     "/api/.well-known/openid-configuration",
+    "/api/.well-known/openid-configuration/*path",
   ],
   mcpRoutes.discoveryHandler
 );
@@ -32,19 +36,14 @@ app.get(
 app.get(
   [
     "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-protected-resource/*path",
     "/api/.well-known/oauth-protected-resource",
+    "/api/.well-known/oauth-protected-resource/*path",
   ],
   mcpRoutes.protectedResourceHandler
 );
 
-app.post(
-  [
-    "/register",
-    "/api/register",
-    "/api/mcp/register"
-  ],
-  mcpRoutes.registrationHandler
-);
+app.post(["/register", "/api/register", "/api/mcp/register"], mcpRoutes.registrationHandler);
 
 // Fallback token and authorize routes
 app.post(["/token", "/api/token"], mcpRoutes.tokenHandler);
