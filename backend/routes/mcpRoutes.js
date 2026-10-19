@@ -402,9 +402,21 @@ function verifyPkce(verifier, challenge, method) {
   return false;
 }
 
+// Helper to get fully qualified origin with HTTPS forced in production
+function getOrigin(req) {
+  const host = req.headers["x-forwarded-host"] || req.get("host") || "listbook.wowosapps.com";
+  const proto =
+    req.headers["x-forwarded-proto"] ||
+    req.protocol ||
+    (host.includes("localhost") ? "http" : "https");
+
+  const finalProto = host.includes("localhost") ? proto : "https";
+  return `${finalProto}://${host}`;
+}
+
 // Helper to send 401 with standard WWW-Authenticate pointing to metadata
 function sendUnauthorized(res, req, message = "Authentication required.") {
-  const origin = `${req.protocol}://${req.get("host")}`;
+  const origin = getOrigin(req);
   res.setHeader(
     "WWW-Authenticate",
     `Bearer realm="ListBook", error="unauthorized", resource_metadata="${origin}/.well-known/oauth-protected-resource"`
@@ -418,7 +430,7 @@ function sendUnauthorized(res, req, message = "Authentication required.") {
 
 // OAuth 2.0 Authorization Server Metadata (RFC 8414 / OpenID Connect Discovery)
 function getDiscoveryMetadata(req, res) {
-  const origin = `${req.protocol}://${req.get("host")}`;
+  const origin = getOrigin(req);
   res.setHeader("Content-Type", "application/json");
   return res.json({
     issuer: origin,
@@ -428,7 +440,7 @@ function getDiscoveryMetadata(req, res) {
     response_types_supported: ["code"],
     response_modes_supported: ["query"],
     grant_types_supported: ["authorization_code", "refresh_token"],
-    token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
+    token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic", "none"],
     code_challenge_methods_supported: ["S256", "plain"],
     scopes_supported: ["read", "write"],
   });
@@ -436,7 +448,7 @@ function getDiscoveryMetadata(req, res) {
 
 // OAuth 2.0 Protected Resource Metadata (RFC 9728)
 function getProtectedResourceMetadata(req, res) {
-  const origin = `${req.protocol}://${req.get("host")}`;
+  const origin = getOrigin(req);
   res.setHeader("Content-Type", "application/json");
   return res.json({
     resource: `${origin}/api/mcp`,
@@ -448,25 +460,32 @@ function getProtectedResourceMetadata(req, res) {
 
 // Dynamic Client Registration (RFC 7591)
 function registrationHandler(req, res) {
+  const origin = getOrigin(req);
   const clientId = "chatgpt-" + uid();
   const clientSecret = uid() + uid();
-  const redirectUris = Array.isArray(req.body?.redirect_uris)
-    ? req.body.redirect_uris
-    : req.body?.redirect_uri
-    ? [req.body.redirect_uri]
+  const body = req.body || {};
+
+  const redirectUris = Array.isArray(body.redirect_uris)
+    ? body.redirect_uris
+    : body.redirect_uri
+    ? [body.redirect_uri]
     : [];
 
-  return res.status(201).json({
+  const responseData = {
     client_id: clientId,
     client_secret: clientSecret,
     client_id_issued_at: Math.floor(Date.now() / 1000),
     client_secret_expires_at: 0,
-    client_name: req.body?.client_name || "ChatGPT MCP Client",
+    client_name: body.client_name || "ChatGPT MCP Client",
     redirect_uris: redirectUris,
-    grant_types: ["authorization_code", "refresh_token"],
-    response_types: ["code"],
-    token_endpoint_auth_method: req.body?.token_endpoint_auth_method || "none",
-  });
+    grant_types: body.grant_types || ["authorization_code", "refresh_token"],
+    response_types: body.response_types || ["code"],
+    token_endpoint_auth_method: body.token_endpoint_auth_method || "client_secret_post",
+    scope: body.scope || "read write",
+  };
+
+  res.setHeader("Content-Type", "application/json");
+  return res.status(201).json(responseData);
 }
 
 // HTML Login Page Template
@@ -589,7 +608,7 @@ function renderLoginPage({
 
 // Success Confirmation Page Template (Direct Browser Access)
 function renderSuccessPage({ user, token, req }) {
-  const origin = `${req.protocol}://${req.get("host")}`;
+  const origin = getOrigin(req);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1004,7 +1023,7 @@ router.post("/messages", async (req, res) => {
 // OPENAPI 3.0 SPECIFICATION WITH OAUTH 2.0 (For ChatGPT Actions)
 // ============================================================================
 router.get("/openapi.json", (req, res) => {
-  const origin = `${req.protocol}://${req.get("host")}`;
+  const origin = getOrigin(req);
   res.json({
     openapi: "3.0.0",
     info: {

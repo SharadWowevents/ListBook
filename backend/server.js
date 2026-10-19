@@ -13,6 +13,7 @@ const app = express();
 connectDB();
 
 // Middleware
+app.set("trust proxy", true);
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
