@@ -132,9 +132,15 @@ export default function App() {
         ls.set("listbook:cachedBoard", updatedBoard);
         setBoard(updatedBoard);
         setViewing(true);
-        showToast(
-          `List "${res.addedList?.name || sharedInfo.list?.name}" added to your ListBook!`
-        );
+        if (res.alreadyAdded) {
+          showToast(
+            `Opened "${res.addedList?.name || sharedInfo.list?.name}" (already in your lists)`
+          );
+        } else {
+          showToast(
+            `List "${res.addedList?.name || sharedInfo.list?.name}" added to your ListBook!`
+          );
+        }
         cleanShareUrl();
         setSharedInfo(null);
         return;
@@ -437,15 +443,22 @@ export default function App() {
         <AcceptShareModal
           sharedInfo={sharedInfo}
           token={syncRef.current.token}
-          onAccepted={(addedList, updatedBoard) => {
+          board={board}
+          onAccepted={(addedList, updatedBoard, alreadyAdded) => {
             setBoard(updatedBoard);
             ls.set("listbook:cachedBoard", updatedBoard);
             setViewing(true);
             cleanShareUrl();
             setSharedInfo(null);
-            showToast(
-              `List "${addedList?.name || sharedInfo.list?.name}" added to your ListBook!`
-            );
+            if (alreadyAdded) {
+              showToast(
+                `Opened "${addedList?.name || sharedInfo.list?.name}" (already in your lists)`
+              );
+            } else {
+              showToast(
+                `List "${addedList?.name || sharedInfo.list?.name}" added to your ListBook!`
+              );
+            }
           }}
           onDismiss={() => {
             cleanShareUrl();

@@ -70,6 +70,32 @@ exports.shareWithUser = async (req, res) => {
       return res.status(404).json({ error: "User does not exist" });
     }
 
+    if (!recipient.board) {
+      recipient.board = { lists: [], activeId: null, updatedAt: Date.now() };
+    }
+
+    // Check if recipient already has this exact list
+    const existingInRecipient = recipient.board.lists.find((l) => {
+      const sameName =
+        l.name.trim().toLowerCase() === list.name.trim().toLowerCase();
+      if (!sameName) return false;
+      const srcTodos = list.todos || [];
+      if (l.todos.length !== srcTodos.length) return false;
+      return l.todos.every((t, i) => t.text === srcTodos[i]?.text);
+    });
+
+    if (existingInRecipient) {
+      recipient.board.activeId = existingInRecipient.id;
+      recipient.board.updatedAt = Date.now();
+      await recipient.save();
+      return res.json({
+        success: true,
+        alreadyHad: true,
+        message: `${recipient.displayName} already has this list in their ListBook.`,
+        listId: existingInRecipient.id,
+      });
+    }
+
     const newListId = uid();
     const clonedList = {
       id: newListId,
@@ -83,9 +109,6 @@ exports.shareWithUser = async (req, res) => {
       })),
     };
 
-    if (!recipient.board) {
-      recipient.board = { lists: [], activeId: null, updatedAt: Date.now() };
-    }
     recipient.board.lists.push(clonedList);
     if (!recipient.board.activeId) {
       recipient.board.activeId = newListId;
@@ -95,6 +118,7 @@ exports.shareWithUser = async (req, res) => {
 
     return res.json({
       success: true,
+      alreadyHad: false,
       message: `List "${list.name}" shared with ${recipient.displayName} successfully!`,
       listId: newListId,
     });
@@ -172,11 +196,43 @@ exports.acceptSharedList = async (req, res) => {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ error: "User not found." });
 
+    if (!user.board) {
+      user.board = { lists: [], activeId: null, updatedAt: Date.now() };
+    }
+
+    // Check if user already got this list previously
+    const existingList = user.board.lists.find((l) => {
+      if (l.sourceShareId && l.sourceShareId === shareId) return true;
+      const sameName =
+        l.name.trim().toLowerCase() === record.list.name.trim().toLowerCase();
+      if (!sameName) return false;
+      const recTodos = record.list.todos || [];
+      if (l.todos.length !== recTodos.length) return false;
+      return l.todos.every((t, i) => t.text === recTodos[i]?.text);
+    });
+
+    if (existingList) {
+      if (!existingList.sourceShareId) {
+        existingList.sourceShareId = shareId;
+      }
+      user.board.activeId = existingList.id;
+      user.board.updatedAt = Date.now();
+      await user.save();
+
+      return res.json({
+        board: user.board,
+        addedList: existingList,
+        alreadyAdded: true,
+        message: `You already have "${existingList.name}" in your ListBook.`,
+      });
+    }
+
     const newListId = uid();
     const clonedList = {
       id: newListId,
       name: record.list.name,
       starred: Boolean(record.list.starred),
+      sourceShareId: shareId,
       todos: (record.list.todos || []).map((t) => ({
         id: uid(),
         text: t.text,
@@ -185,9 +241,6 @@ exports.acceptSharedList = async (req, res) => {
       })),
     };
 
-    if (!user.board) {
-      user.board = { lists: [], activeId: null, updatedAt: Date.now() };
-    }
     user.board.lists.push(clonedList);
     user.board.activeId = newListId;
     user.board.updatedAt = Date.now();
@@ -196,6 +249,7 @@ exports.acceptSharedList = async (req, res) => {
     return res.json({
       board: user.board,
       addedList: clonedList,
+      alreadyAdded: false,
     });
   } catch (err) {
     console.error("Accept shared list error:", err);

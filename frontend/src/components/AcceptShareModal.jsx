@@ -2,7 +2,13 @@ import React, { useState } from "react";
 import { Icons } from "./Icons";
 import { apiAcceptSharedList } from "../utils/api";
 
-export default function AcceptShareModal({ sharedInfo, token, onAccepted, onDismiss }) {
+export default function AcceptShareModal({
+  sharedInfo,
+  token,
+  board,
+  onAccepted,
+  onDismiss,
+}) {
   const [importing, setImporting] = useState(false);
   const [error, setError] = useState("");
 
@@ -11,12 +17,28 @@ export default function AcceptShareModal({ sharedInfo, token, onAccepted, onDism
   const { list, sharedBy, shareId } = sharedInfo;
   const taskCount = list.todos?.length || 0;
 
-  const handleAccept = async () => {
+  const existingList = board?.lists?.find((l) => {
+    if (l.sourceShareId && l.sourceShareId === shareId) return true;
+    const sameName =
+      l.name.trim().toLowerCase() === list.name.trim().toLowerCase();
+    if (!sameName) return false;
+    const recTodos = list.todos || [];
+    if (l.todos.length !== recTodos.length) return false;
+    return l.todos.every((t, i) => t.text === recTodos[i]?.text);
+  });
+  const alreadyHave = Boolean(existingList);
+
+  const handleAction = async () => {
+    if (alreadyHave) {
+      onAccepted(existingList, { ...board, activeId: existingList.id }, true);
+      return;
+    }
+
     setImporting(true);
     setError("");
     try {
       const res = await apiAcceptSharedList(token, shareId);
-      onAccepted(res.addedList, res.board);
+      onAccepted(res.addedList, res.board, res.alreadyAdded);
     } catch (err) {
       setError(err.message || "Failed to add shared list.");
       setImporting(false);
@@ -28,17 +50,33 @@ export default function AcceptShareModal({ sharedInfo, token, onAccepted, onDism
       <div className="modal-card">
         <div className="modal-head">
           <div className="modal-title-wrap">
-            <span className="modal-badge">Incoming Shared List</span>
+            <span className="modal-badge">
+              {alreadyHave ? "Already In Your Lists" : "Incoming Shared List"}
+            </span>
             <h3 className="modal-title">“{list.name}”</h3>
           </div>
-          <button className="icon-btn modal-close" onClick={onDismiss} aria-label="Close modal">
+          <button
+            className="icon-btn modal-close"
+            onClick={onDismiss}
+            aria-label="Close modal"
+          >
             <Icons.X />
           </button>
         </div>
 
         <div className="modal-body">
           <p className="modal-desc">
-            <b>{sharedBy}</b> shared this list with you containing <b>{taskCount}</b> {taskCount === 1 ? "task" : "tasks"}.
+            {alreadyHave ? (
+              <>
+                You already have <b>“{list.name}”</b> in your ListBook
+                (shared by <b>{sharedBy}</b>).
+              </>
+            ) : (
+              <>
+                <b>{sharedBy}</b> shared this list with you containing{" "}
+                <b>{taskCount}</b> {taskCount === 1 ? "task" : "tasks"}.
+              </>
+            )}
           </p>
 
           {taskCount > 0 && (
@@ -52,7 +90,9 @@ export default function AcceptShareModal({ sharedInfo, token, onAccepted, onDism
                   </li>
                 ))}
                 {taskCount > 5 && (
-                  <li className="shared-preview-more">+ {taskCount - 5} more tasks</li>
+                  <li className="shared-preview-more">
+                    + {taskCount - 5} more tasks
+                  </li>
                 )}
               </ul>
             </div>
@@ -72,10 +112,14 @@ export default function AcceptShareModal({ sharedInfo, token, onAccepted, onDism
             <button
               type="button"
               className="btn"
-              onClick={handleAccept}
+              onClick={handleAction}
               disabled={importing}
             >
-              {importing ? "Adding to Lists..." : "Add to My ListBook"}
+              {alreadyHave
+                ? "Open List"
+                : importing
+                ? "Adding to Lists..."
+                : "Add to My ListBook"}
             </button>
           </div>
         </div>

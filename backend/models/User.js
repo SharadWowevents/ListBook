@@ -41,6 +41,7 @@ const ListSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true, maxlength: 60 },
     starred: { type: Boolean, default: false },
     todos: [TodoSchema],
+    sourceShareId: { type: String, default: null },
   },
   { _id: false }
 );
