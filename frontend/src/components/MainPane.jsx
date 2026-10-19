@@ -27,12 +27,7 @@ export default function MainPane({
 }) {
   const [titleText, setTitleText] = useState(activeList?.name || "");
   const [showDone, setShowDone] = useState(true);
-  const [showLogWindow, setShowLogWindow] = useState(() => {
-    if (typeof window !== "undefined") {
-      return window.innerWidth >= 900;
-    }
-    return false;
-  });
+  const [showLogWindow, setShowLogWindow] = useState(false);
   const todosContainerRef = useRef(null);
 
   useEffect(() => {

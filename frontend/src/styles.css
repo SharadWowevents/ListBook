@@ -142,10 +142,9 @@ svg { display: block; }
   flex: 1; overflow-y: auto; padding-block: 6px 24px;
   padding-left: max(20px, env(safe-area-inset-left, 0px));
   padding-right: max(20px, env(safe-area-inset-right, 0px));
-  display: flex; flex-direction: column;
 }
 .todo-inner {
-  width: 100%; max-width: 760px; margin: 0 auto;
+  max-width: 860px;
   display: flex; flex-direction: column; gap: 2px;
 }
 .main-split-wrap {
@@ -166,38 +165,29 @@ svg { display: block; }
 .del { opacity: .55; }
 .todo:hover .del { opacity: 1; }
 .done-toggle { display: flex; align-items: center; gap: 8px; font-size: .75rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 16px 10px 8px; }
-.empty { padding: 40px 12px; color: var(--muted); font-size: 1.2rem; line-height: 1.5; max-width: 460px; margin: 0 auto; text-align: center; }
+.empty { padding: 40px 12px; color: var(--muted); font-size: 1.2rem; line-height: 1.5; max-width: 460px; }
 .sortable-ghost { opacity: .35; }
 .sortable-chosen { box-shadow: 0 10px 30px rgba(0,0,0,.12); }
 .sortable-drag { opacity: .95; }
 
-/* ---------- composer input (centered in mid of screen) ---------- */
+/* ---------- composer ---------- */
 .composer {
   border-top: 1px solid var(--line); background: var(--panel);
-  padding-block: 14px calc(14px + env(safe-area-inset-bottom, 0px));
-  padding-inline: max(20px, env(safe-area-inset-left, 0px));
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  width: 100%; box-sizing: border-box;
+  padding-block: 12px calc(12px + env(safe-area-inset-bottom, 0px));
+  padding-left: max(20px, env(safe-area-inset-left, 0px));
+  padding-right: max(20px, env(safe-area-inset-right, 0px));
 }
 .composer form {
-  width: 100%; max-width: 660px; margin: 0 auto;
-  display: flex; gap: 10px; align-items: center;
+  max-width: 860px;
+  display: flex; gap: 8px; align-items: center;
 }
-.composer .input {
-  flex: 1; font-size: 1.25rem; padding: 14px 18px; background: var(--bg);
-  border: 1.5px solid var(--line); border-radius: 14px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.02); transition: border-color .15s, box-shadow .15s;
-}
-.composer .input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
-}
+.composer .input { font-size: 1.25rem; padding: 14px 16px; background: var(--bg); }
 .mic, .send { width: 54px; height: 54px; border-radius: 14px; display: grid; place-items: center; flex: none; }
 .mic { background: var(--soft); }
 .send { background: var(--ink); color: var(--bg); }
 .mic.live { background: var(--danger); color: #fff; animation: pulse 1.2s ease-in-out infinite; }
 @keyframes pulse { 50% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--danger) 25%, transparent); } }
-.hint { width: 100%; max-width: 660px; margin: 0 auto; font-size: .95rem; color: var(--muted); min-height: 0; padding-top: 6px; text-align: center; }
+.hint { max-width: 860px; font-size: .95rem; color: var(--muted); min-height: 0; padding-top: 6px; }
 .hint:empty { display: none; }
 
 /* ---------- log window (on the other side of tasks list) ---------- */
