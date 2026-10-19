@@ -93,3 +93,18 @@ export async function apiAcceptSharedList(token, shareId) {
   if (!res.ok) throw new Error(data.error || "Failed to accept shared list");
   return data;
 }
+
+// Get members / collaborators associated with a list
+export async function apiGetListMembers(token, listId) {
+  const res = await fetch(
+    `${API_BASE}/board/list/${encodeURIComponent(listId)}/members`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to load list members");
+  return data;
+}

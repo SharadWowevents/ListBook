@@ -24,9 +24,25 @@ const SharedListSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    ownerUserId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      index: true,
+    },
+    ownerListId: {
+      type: String,
+      index: true,
+    },
+    claimedBy: [
+      {
+        userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        username: String,
+        displayName: String,
+        claimedAt: { type: Date, default: Date.now },
+      },
+    ],
   },
   { timestamps: true }
 );
 
 module.exports = mongoose.model("SharedList", SharedListSchema);
-

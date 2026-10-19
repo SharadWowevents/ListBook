@@ -85,6 +85,25 @@ exports.shareWithUser = async (req, res) => {
     });
 
     if (existingInRecipient) {
+      // Also update sender's sharedWith if not present
+      const senderList = sender.board?.lists?.find((l) => l.id === list.id);
+      if (senderList) {
+        if (!senderList.sharedWith) senderList.sharedWith = [];
+        const alreadyInSender = senderList.sharedWith.some(
+          (m) => m.username === recipient.usernameKey
+        );
+        if (!alreadyInSender) {
+          senderList.sharedWith.push({
+            username: recipient.usernameKey,
+            displayName: recipient.displayName,
+            sharedAt: Date.now(),
+            via: "username",
+          });
+          sender.board.updatedAt = Date.now();
+          await sender.save();
+        }
+      }
+
       recipient.board.activeId = existingInRecipient.id;
       recipient.board.updatedAt = Date.now();
       await recipient.save();
@@ -93,6 +112,12 @@ exports.shareWithUser = async (req, res) => {
         alreadyHad: true,
         message: `${recipient.displayName} already has this list in their ListBook.`,
         listId: existingInRecipient.id,
+        member: {
+          username: recipient.usernameKey,
+          displayName: recipient.displayName,
+          sharedAt: Date.now(),
+          via: "username",
+        },
       });
     }
 
@@ -101,6 +126,7 @@ exports.shareWithUser = async (req, res) => {
       id: newListId,
       name: list.name,
       starred: Boolean(list.starred),
+      originalOwner: sender.displayName,
       todos: (list.todos || []).map((t) => ({
         id: uid(),
         text: t.text,
@@ -116,11 +142,36 @@ exports.shareWithUser = async (req, res) => {
     recipient.board.updatedAt = Date.now();
     await recipient.save();
 
+    // Record in sender's list.sharedWith
+    const senderList = sender.board?.lists?.find((l) => l.id === list.id);
+    if (senderList) {
+      if (!senderList.sharedWith) senderList.sharedWith = [];
+      const alreadyInSender = senderList.sharedWith.some(
+        (m) => m.username === recipient.usernameKey
+      );
+      if (!alreadyInSender) {
+        senderList.sharedWith.push({
+          username: recipient.usernameKey,
+          displayName: recipient.displayName,
+          sharedAt: Date.now(),
+          via: "username",
+        });
+        sender.board.updatedAt = Date.now();
+        await sender.save();
+      }
+    }
+
     return res.json({
       success: true,
       alreadyHad: false,
       message: `List "${list.name}" shared with ${recipient.displayName} successfully!`,
       listId: newListId,
+      member: {
+        username: recipient.usernameKey,
+        displayName: recipient.displayName,
+        sharedAt: Date.now(),
+        via: "username",
+      },
     });
   } catch (err) {
     console.error("Share with user error:", err);
@@ -153,6 +204,9 @@ exports.createShareLink = async (req, res) => {
         starred: Boolean(list.starred),
       },
       sharedBy: user.displayName,
+      ownerUserId: user._id,
+      ownerListId: list.id,
+      claimedBy: [],
     });
 
     return res.json({
@@ -211,9 +265,60 @@ exports.acceptSharedList = async (req, res) => {
       return l.todos.every((t, i) => t.text === recTodos[i]?.text);
     });
 
+    // Record user in SharedList.claimedBy
+    if (!record.claimedBy) record.claimedBy = [];
+    const alreadyClaimed = record.claimedBy.some(
+      (c) =>
+        String(c.userId) === String(user._id) || c.username === user.usernameKey
+    );
+    if (!alreadyClaimed) {
+      record.claimedBy.push({
+        userId: user._id,
+        username: user.usernameKey,
+        displayName: user.displayName,
+        claimedAt: new Date(),
+      });
+      await record.save();
+    }
+
+    // Also record user in original owner's sharedWith if owner exists
+    if (record.ownerUserId && String(record.ownerUserId) !== String(user._id)) {
+      try {
+        const owner = await User.findById(record.ownerUserId);
+        if (owner?.board?.lists) {
+          const ownerList = owner.board.lists.find(
+            (l) =>
+              l.id === record.ownerListId ||
+              l.name.trim().toLowerCase() === record.list.name.trim().toLowerCase()
+          );
+          if (ownerList) {
+            if (!ownerList.sharedWith) ownerList.sharedWith = [];
+            const alreadyInOwner = ownerList.sharedWith.some(
+              (m) => m.username === user.usernameKey
+            );
+            if (!alreadyInOwner) {
+              ownerList.sharedWith.push({
+                username: user.usernameKey,
+                displayName: user.displayName,
+                sharedAt: Date.now(),
+                via: "link",
+              });
+              owner.board.updatedAt = Date.now();
+              await owner.save();
+            }
+          }
+        }
+      } catch (ownerErr) {
+        console.warn("Could not update owner sharedWith:", ownerErr);
+      }
+    }
+
     if (existingList) {
       if (!existingList.sourceShareId) {
         existingList.sourceShareId = shareId;
+      }
+      if (!existingList.originalOwner) {
+        existingList.originalOwner = record.sharedBy;
       }
       user.board.activeId = existingList.id;
       user.board.updatedAt = Date.now();
@@ -233,6 +338,7 @@ exports.acceptSharedList = async (req, res) => {
       name: record.list.name,
       starred: Boolean(record.list.starred),
       sourceShareId: shareId,
+      originalOwner: record.sharedBy,
       todos: (record.list.todos || []).map((t) => ({
         id: uid(),
         text: t.text,
@@ -254,5 +360,65 @@ exports.acceptSharedList = async (req, res) => {
   } catch (err) {
     console.error("Accept shared list error:", err);
     return res.status(500).json({ error: "Failed to add shared list." });
+  }
+};
+
+// GET /api/board/list/:listId/members (Get all users associated with this list)
+exports.getListMembers = async (req, res) => {
+  try {
+    const { listId } = req.params;
+    const user = await User.findById(req.user.id);
+    if (!user || !user.board)
+      return res.status(404).json({ error: "User not found." });
+
+    const targetList = (user.board.lists || []).find((l) => l.id === listId);
+    if (!targetList) return res.status(404).json({ error: "List not found." });
+
+    const membersMap = new Map();
+
+    (targetList.sharedWith || []).forEach((m) => {
+      membersMap.set(m.username.toLowerCase(), {
+        username: m.username,
+        displayName: m.displayName,
+        sharedAt: m.sharedAt,
+        via: m.via || "username",
+      });
+    });
+
+    // Also include any users who claimed via share link for this list
+    const sharedRecords = await SharedList.find({
+      ownerUserId: user._id,
+      ownerListId: listId,
+    });
+
+    for (const rec of sharedRecords) {
+      for (const claim of rec.claimedBy || []) {
+        const uKey = (claim.username || "").toLowerCase();
+        if (uKey && !membersMap.has(uKey)) {
+          membersMap.set(uKey, {
+            username: claim.username,
+            displayName: claim.displayName,
+            sharedAt: claim.claimedAt
+              ? new Date(claim.claimedAt).getTime()
+              : Date.now(),
+            via: "link",
+          });
+        }
+      }
+    }
+
+    return res.json({
+      listId,
+      listName: targetList.name,
+      originalOwner: targetList.originalOwner || null,
+      currentUser: {
+        username: user.usernameKey,
+        displayName: user.displayName,
+      },
+      members: Array.from(membersMap.values()),
+    });
+  } catch (err) {
+    console.error("Get list members error:", err);
+    return res.status(500).json({ error: "Failed to fetch list members." });
   }
 };

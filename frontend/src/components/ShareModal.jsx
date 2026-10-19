@@ -1,10 +1,14 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Icons } from "./Icons";
-import { apiShareWithUser, apiCreateShareLink } from "../utils/api";
+import {
+  apiShareWithUser,
+  apiCreateShareLink,
+  apiGetListMembers,
+} from "../utils/api";
 import { ls } from "../utils/helpers";
 
 export default function ShareModal({ list, token, onClose, showToast }) {
-  const [tab, setTab] = useState("user"); // 'user' | 'link'
+  const [tab, setTab] = useState("user"); // 'user' | 'link' | 'members'
   const [targetUsername, setTargetUsername] = useState("");
   const [sharingUser, setSharingUser] = useState(false);
   const [userError, setUserError] = useState("");
@@ -15,6 +19,10 @@ export default function ShareModal({ list, token, onClose, showToast }) {
   const [linkCopied, setLinkCopied] = useState(false);
   const [linkError, setLinkError] = useState("");
 
+  const [members, setMembers] = useState(list.sharedWith || []);
+  const [originalOwner, setOriginalOwner] = useState(list.originalOwner || null);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+
   const inputRef = useRef(null);
   const fetchAttemptedRef = useRef(false);
 
@@ -23,6 +31,31 @@ export default function ShareModal({ list, token, onClose, showToast }) {
       inputRef.current?.focus();
     }
   }, [tab]);
+
+  // Load associated members on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function loadMembers() {
+      try {
+        setLoadingMembers(true);
+        const authToken = token || ls.get("listbook:session")?.token;
+        if (!authToken) return;
+        const res = await apiGetListMembers(authToken, list.id);
+        if (isMounted) {
+          if (Array.isArray(res.members)) setMembers(res.members);
+          if (res.originalOwner) setOriginalOwner(res.originalOwner);
+        }
+      } catch (err) {
+        console.warn("Could not fetch members:", err);
+      } finally {
+        if (isMounted) setLoadingMembers(false);
+      }
+    }
+    loadMembers();
+    return () => {
+      isMounted = false;
+    };
+  }, [token, list.id]);
 
   const generateLink = useCallback(async () => {
     setLoadingLink(true);
@@ -67,9 +100,16 @@ export default function ShareModal({ list, token, onClose, showToast }) {
       const res = await apiShareWithUser(authToken, list, trimmed);
       setUserSuccess(res.message || `Shared with ${trimmed}!`);
       showToast(res.message || `List "${list.name}" shared with ${trimmed}!`);
-      setTimeout(() => {
-        onClose();
-      }, 1400);
+
+      if (res.member) {
+        setMembers((prev) => [
+          res.member,
+          ...prev.filter(
+            (m) => m.username.toLowerCase() !== res.member.username.toLowerCase()
+          ),
+        ]);
+      }
+      setTargetUsername("");
     } catch (err) {
       const msg = err.message || "";
       if (
@@ -121,7 +161,11 @@ export default function ShareModal({ list, token, onClose, showToast }) {
             <span className="modal-badge">Share List</span>
             <h3 className="modal-title">“{list.name}”</h3>
           </div>
-          <button className="icon-btn modal-close" onClick={onClose} aria-label="Close modal">
+          <button
+            className="icon-btn modal-close"
+            onClick={onClose}
+            aria-label="Close modal"
+          >
             <Icons.X />
           </button>
         </div>
@@ -144,12 +188,20 @@ export default function ShareModal({ list, token, onClose, showToast }) {
           >
             By Link
           </button>
+          <button
+            type="button"
+            className={`modal-tab ${tab === "members" ? "active" : ""}`}
+            onClick={() => setTab("members")}
+          >
+            Members {members.length > 0 ? `(${members.length})` : ""}
+          </button>
         </div>
 
         {tab === "user" ? (
           <form className="modal-body" onSubmit={handleShareUserSubmit}>
             <p className="modal-desc">
-              Send a copy of this list directly into another registered user’s ListBook account.
+              Send a copy of this list directly into another registered user’s
+              ListBook account.
             </p>
 
             <div className="field">
@@ -165,13 +217,44 @@ export default function ShareModal({ list, token, onClose, showToast }) {
                   setTargetUsername(e.target.value);
                   setUserError("");
                 }}
-                disabled={sharingUser || Boolean(userSuccess)}
+                disabled={sharingUser}
                 autoComplete="off"
               />
             </div>
 
             {userError && <div className="modal-error">{userError}</div>}
             {userSuccess && <div className="modal-success">{userSuccess}</div>}
+
+            {members.length > 0 && (
+              <div
+                style={{
+                  fontSize: "0.86rem",
+                  color: "var(--muted)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  marginTop: 2,
+                }}
+              >
+                <span>
+                  Shared with <b>{members.length}</b> {members.length === 1 ? "user" : "users"}
+                </span>
+                <button
+                  type="button"
+                  style={{
+                    background: "none",
+                    border: "none",
+                    color: "var(--accent)",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    padding: 0,
+                  }}
+                  onClick={() => setTab("members")}
+                >
+                  View Members →
+                </button>
+              </div>
+            )}
 
             <div className="modal-actions">
               <button
@@ -185,16 +268,17 @@ export default function ShareModal({ list, token, onClose, showToast }) {
               <button
                 type="submit"
                 className="btn"
-                disabled={sharingUser || !targetUsername.trim() || Boolean(userSuccess)}
+                disabled={sharingUser || !targetUsername.trim()}
               >
                 {sharingUser ? "Sharing..." : "Share List"}
               </button>
             </div>
           </form>
-        ) : (
+        ) : tab === "link" ? (
           <div className="modal-body">
             <p className="modal-desc">
-              Anyone with this link can view and import a copy of “{list.name}” into their ListBook account.
+              Anyone with this link can view and import a copy of “{list.name}”
+              into their ListBook account.
             </p>
 
             {loadingLink ? (
@@ -258,9 +342,109 @@ export default function ShareModal({ list, token, onClose, showToast }) {
               </button>
             </div>
           </div>
+        ) : (
+          <div className="modal-body">
+            <p className="modal-desc">
+              Users who have received or are associated with <b>“{list.name}”</b>.
+            </p>
+
+            {/* Creator / Owner Card */}
+            <div className="members-section">
+              <div className="members-section-label">Creator / Owner</div>
+              <div className="member-row">
+                <div className="member-avatar">
+                  {(originalOwner || "You").charAt(0).toUpperCase()}
+                </div>
+                <div className="member-info">
+                  <div className="member-name">
+                    {originalOwner ? originalOwner : "You"}
+                  </div>
+                  <div className="member-meta">
+                    {originalOwner
+                      ? "Original creator (shared with you)"
+                      : "List creator & owner"}
+                  </div>
+                </div>
+                <span className="member-tag owner">
+                  {originalOwner ? "Creator" : "Owner"}
+                </span>
+              </div>
+            </div>
+
+            {/* Collaborators / Shared Members List */}
+            <div className="members-section" style={{ marginTop: 4 }}>
+              <div className="members-section-label">
+                Shared With ({members.length})
+              </div>
+
+              {loadingMembers && members.length === 0 ? (
+                <div className="modal-loading">Loading members...</div>
+              ) : members.length === 0 ? (
+                <div className="members-empty">
+                  <span>This list has not been shared with anyone yet.</span>
+                  <div className="members-empty-actions">
+                    <button
+                      type="button"
+                      className="btn secondary"
+                      onClick={() => setTab("user")}
+                    >
+                      Share via Username
+                    </button>
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={() => setTab("link")}
+                    >
+                      Get Share Link
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="members-list">
+                  {members.map((m) => (
+                    <div key={m.username} className="member-row">
+                      <div className="member-avatar">
+                        {(m.displayName || m.username).charAt(0).toUpperCase()}
+                      </div>
+                      <div className="member-info">
+                        <div className="member-name">{m.displayName}</div>
+                        <div className="member-meta">
+                          @{m.username}
+                          {m.sharedAt && (
+                            <>
+                              {" · "}
+                              {new Date(m.sharedAt).toLocaleDateString(
+                                undefined,
+                                {
+                                  month: "short",
+                                  day: "numeric",
+                                }
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <span
+                        className={`member-tag ${
+                          m.via === "link" ? "via-link" : "via-user"
+                        }`}
+                      >
+                        {m.via === "link" ? "via Link" : "via Username"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="modal-actions" style={{ marginTop: 8 }}>
+              <button type="button" className="btn secondary" onClick={onClose}>
+                Close
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>
   );
 }
-

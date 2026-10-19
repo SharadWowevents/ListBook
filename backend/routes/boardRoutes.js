@@ -8,6 +8,7 @@ const {
   createShareLink,
   getSharedList,
   acceptSharedList,
+  getListMembers,
 } = require("../controllers/boardController");
 
 // Public route to preview shared list (no authentication required)
@@ -20,5 +21,6 @@ router.put("/", saveBoard);
 router.post("/share-user", shareWithUser);
 router.post("/share-link", createShareLink);
 router.post("/accept-share", acceptSharedList);
+router.get("/list/:listId/members", getListMembers);
 
 module.exports = router;

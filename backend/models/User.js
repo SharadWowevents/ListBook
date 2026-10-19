@@ -35,6 +35,16 @@ const TodoSchema = new mongoose.Schema(
   { _id: false }
 );
 
+const SharedMemberSchema = new mongoose.Schema(
+  {
+    username: { type: String, required: true },
+    displayName: { type: String, required: true },
+    sharedAt: { type: Number, default: () => Date.now() },
+    via: { type: String, default: "username" }, // 'username' | 'link'
+  },
+  { _id: false }
+);
+
 const ListSchema = new mongoose.Schema(
   {
     id: { type: String, required: true },
@@ -42,6 +52,8 @@ const ListSchema = new mongoose.Schema(
     starred: { type: Boolean, default: false },
     todos: [TodoSchema],
     sourceShareId: { type: String, default: null },
+    originalOwner: { type: String, default: null },
+    sharedWith: { type: [SharedMemberSchema], default: [] },
   },
   { _id: false }
 );
