@@ -419,7 +419,7 @@ function sendUnauthorized(res, req, message = "Authentication required.") {
   const origin = getOrigin(req);
   res.setHeader(
     "WWW-Authenticate",
-    `Bearer realm="ListBook", error="unauthorized", resource_metadata="${origin}/.well-known/oauth-protected-resource"`
+    `Bearer realm="ListBook", error="unauthorized", resource_metadata="${origin}/api/mcp/.well-known/oauth-protected-resource"`
   );
   return res.status(401).json({
     jsonrpc: "2.0",
@@ -435,12 +435,16 @@ function getDiscoveryMetadata(req, res) {
   return res.json({
     issuer: origin,
     authorization_endpoint: `${origin}/api/mcp/authorize`,
-    token_endpoint: `${origin}/api/oauth/token`,
+    token_endpoint: `${origin}/api/mcp/token`,
     registration_endpoint: `${origin}/api/mcp/register`,
     response_types_supported: ["code"],
     response_modes_supported: ["query"],
     grant_types_supported: ["authorization_code", "refresh_token"],
-    token_endpoint_auth_methods_supported: ["client_secret_post", "client_secret_basic", "none"],
+    token_endpoint_auth_methods_supported: [
+      "client_secret_post",
+      "client_secret_basic",
+      "none",
+    ],
     code_challenge_methods_supported: ["S256", "plain"],
     scopes_supported: ["read", "write"],
   });
@@ -452,7 +456,7 @@ function getProtectedResourceMetadata(req, res) {
   res.setHeader("Content-Type", "application/json");
   return res.json({
     resource: `${origin}/api/mcp`,
-    authorization_servers: [origin],
+    authorization_servers: [origin, `${origin}/api/mcp`],
     scopes_supported: ["read", "write"],
     bearer_methods_supported: ["header"],
   });
@@ -672,20 +676,37 @@ function renderSuccessPage({ user, token, req }) {
 // ============================================================================
 
 // RFC 8414 & RFC 9728 Discovery Endpoints
-router.get("/.well-known/oauth-authorization-server", getDiscoveryMetadata);
-router.get("/.well-known/oauth-protected-resource", getProtectedResourceMetadata);
-router.get("/.well-known/openid-configuration", getDiscoveryMetadata);
-router.post(["/register", "/api/mcp/register"], registrationHandler);
+router.get(
+  [
+    "/.well-known/oauth-authorization-server",
+    "/.well-known/oauth-authorization-server/*",
+    "/.well-known/openid-configuration",
+    "/.well-known/openid-configuration/*",
+  ],
+  getDiscoveryMetadata
+);
+router.get(
+  [
+    "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-protected-resource/*",
+  ],
+  getProtectedResourceMetadata
+);
+
+router.post("/register", registrationHandler);
 
 // GET /api/mcp and /api/mcp/authorize:
 // - If browser request without bearer token: renders the Login Form!
 // - If MCP client request with Bearer token: routes to MCP handler!
 router.get(["/", "/authorize"], async (req, res, next) => {
-  // Check if Bearer token is provided
+  const acceptHeader = req.headers.accept || "";
+  const isBrowserHtmlRequest = acceptHeader.includes("text/html");
+  const isAuthorizeRoute = req.path.includes("authorize") || Boolean(req.query.redirect_uri);
+
   const user = await authenticateRequest(req);
+
   if (user && !req.query.redirect_uri) {
-    // Authenticated browser user viewing status
-    if (req.accepts("html")) {
+    if (isBrowserHtmlRequest) {
       const token = jwt.sign(
         { id: user._id, displayName: user.displayName },
         process.env.JWT_SECRET,
@@ -693,12 +714,12 @@ router.get(["/", "/authorize"], async (req, res, next) => {
       );
       return res.send(renderSuccessPage({ user, token, req }));
     }
-    // Authenticated API / MCP client
     return next();
   }
 
-  // Not authenticated or in OAuth redirect flow: show login form
-  if (req.accepts("html") || req.query.redirect_uri) {
+  // Only render the HTML login page if this is an OAuth redirect flow (/authorize)
+  // or a direct browser navigation explicitly requesting text/html
+  if (isAuthorizeRoute || isBrowserHtmlRequest) {
     return res.send(
       renderLoginPage({
         redirect_uri: req.query.redirect_uri || "",
@@ -712,8 +733,8 @@ router.get(["/", "/authorize"], async (req, res, next) => {
     );
   }
 
-  // API request missing auth -> return 401 with standard WWW-Authenticate
-  return sendUnauthorized(res, req, "Authentication required. Visit /api/mcp to log in.");
+  // For MCP clients probing GET /api/mcp without a token, return 401 + WWW-Authenticate
+  return sendUnauthorized(res, req, "Authentication required.");
 });
 
 // POST /api/mcp/authorize: Handles the login form submission

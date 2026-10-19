@@ -19,15 +19,31 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // Discovery routes (RFC 8414 & RFC 9728)
-app.get("/.well-known/oauth-authorization-server", mcpRoutes.discoveryHandler);
-app.get("/.well-known/oauth-protected-resource", mcpRoutes.protectedResourceHandler);
-app.get("/.well-known/openid-configuration", mcpRoutes.discoveryHandler);
-app.post("/register", mcpRoutes.registrationHandler);
+app.get(
+  [
+    "/.well-known/oauth-authorization-server",
+    "/.well-known/oauth-authorization-server/*path",
+    "/.well-known/openid-configuration",
+    "/.well-known/openid-configuration/*path",
+    "/api/.well-known/oauth-authorization-server",
+    "/api/.well-known/oauth-authorization-server/*path",
+    "/api/.well-known/openid-configuration",
+    "/api/.well-known/openid-configuration/*path",
+  ],
+  mcpRoutes.discoveryHandler
+);
 
-app.get("/api/.well-known/oauth-authorization-server", mcpRoutes.discoveryHandler);
-app.get("/api/.well-known/oauth-protected-resource", mcpRoutes.protectedResourceHandler);
-app.get("/api/.well-known/openid-configuration", mcpRoutes.discoveryHandler);
-app.post("/api/register", mcpRoutes.registrationHandler);
+app.get(
+  [
+    "/.well-known/oauth-protected-resource",
+    "/.well-known/oauth-protected-resource/*path",
+    "/api/.well-known/oauth-protected-resource",
+    "/api/.well-known/oauth-protected-resource/*path",
+  ],
+  mcpRoutes.protectedResourceHandler
+);
+
+app.post(["/register", "/api/register", "/api/mcp/register"], mcpRoutes.registrationHandler);
 
 // Fallback token and authorize routes
 app.post(["/token", "/api/token"], mcpRoutes.tokenHandler);
