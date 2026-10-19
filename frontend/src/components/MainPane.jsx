@@ -11,6 +11,7 @@ export default function MainPane({
   onBack,
   onRenameList,
   onToggleStarList,
+  onShareList,
   onDeleteList,
   onAddTodo,
   onToggleTodoDone,
@@ -112,6 +113,14 @@ export default function MainPane({
           </div>
         </div>
         <div className="head-actions">
+          <button
+            className="icon-btn share-btn"
+            onClick={() => onShareList(activeList)}
+            aria-label={`Share ${activeList.name}`}
+            title="Share list"
+          >
+            <Icons.Share />
+          </button>
           <button
             className={`icon-btn star-btn ${activeList.starred ? "on" : ""}`}
             onClick={() => onToggleStarList(activeList.id)}

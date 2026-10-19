@@ -34,3 +34,56 @@ export async function apiSaveBoard(token, board) {
   if (!res.ok) throw new Error(data.error || "Failed to save board");
   return data;
 }
+
+// Share list with a registered username
+export async function apiShareWithUser(token, list, targetUsername) {
+  const res = await fetch(`${API_BASE}/board/share-user`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ list, targetUsername }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to share list");
+  return data;
+}
+
+// Generate public share link
+export async function apiCreateShareLink(token, list) {
+  const res = await fetch(`${API_BASE}/board/share-link`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ list }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to create share link");
+  return data;
+}
+
+// Get public shared list preview
+export async function apiGetSharedList(shareId) {
+  const res = await fetch(`${API_BASE}/board/shared/${encodeURIComponent(shareId)}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to retrieve shared list");
+  return data;
+}
+
+// Accept and import a shared list
+export async function apiAcceptSharedList(token, shareId) {
+  const res = await fetch(`${API_BASE}/board/accept-share`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ shareId }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to accept shared list");
+  return data;
+}

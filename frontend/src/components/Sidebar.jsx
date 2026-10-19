@@ -8,6 +8,7 @@ export default function Sidebar({
   activeId,
   onSelectList,
   onToggleStarList,
+  onShareList,
   onCreateList,
   onReorderLists,
   onSignOut,
@@ -54,6 +55,17 @@ export default function Sidebar({
         <button className="list-open" onClick={() => onSelectList(l.id)}>
           <span className="list-name">{l.name}</span>
           <span className="count">{openCount || ""}</span>
+        </button>
+        <button
+          className="icon-btn share-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            onShareList(l);
+          }}
+          aria-label={`Share ${l.name}`}
+          title="Share list"
+        >
+          <Icons.Share />
         </button>
         <button
           className={`icon-btn star-btn ${l.starred ? "on" : ""}`}

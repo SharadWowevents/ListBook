@@ -1,10 +1,17 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { uid, ls, reorderSubset } from "./utils/helpers";
-import { apiFetchBoard, apiSaveBoard } from "./utils/api";
+import {
+  apiFetchBoard,
+  apiSaveBoard,
+  apiGetSharedList,
+  apiAcceptSharedList,
+} from "./utils/api";
 import LoginScreen from "./components/LoginScreen";
 import Sidebar from "./components/Sidebar";
 import MainPane from "./components/MainPane";
 import Toast from "./components/Toast";
+import ShareModal from "./components/ShareModal";
+import AcceptShareModal from "./components/AcceptShareModal";
 import "./styles.css";
 
 export default function App() {
@@ -14,6 +21,8 @@ export default function App() {
   const [viewing, setViewing] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [toastState, setToastState] = useState(null);
+  const [sharingList, setSharingList] = useState(null);
+  const [sharedInfo, setSharedInfo] = useState(null);
 
   const syncRef = useRef({
     token: null,
@@ -68,11 +77,74 @@ export default function App() {
     [flush]
   );
 
-  const handleAuthenticated = (token, name, initialBoard) => {
+  const cleanShareUrl = useCallback(() => {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("share");
+      if (url.hash && url.hash.includes("share")) {
+        url.hash = "";
+      }
+      window.history.replaceState(
+        {},
+        document.title,
+        url.pathname + (url.search ? url.search : "")
+      );
+    } catch {
+      // Ignore URL manipulation failures
+    }
+  }, []);
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    let shareId = searchParams.get("share");
+    if (!shareId && window.location.hash) {
+      const hash = window.location.hash.replace(/^#/, "");
+      const hashParams = new URLSearchParams(
+        hash.includes("?") ? hash.slice(hash.indexOf("?")) : hash
+      );
+      shareId =
+        hashParams.get("share") ||
+        (hash.startsWith("share=") ? hash.replace("share=", "") : null);
+    }
+
+    if (shareId) {
+      apiGetSharedList(shareId)
+        .then((data) => {
+          setSharedInfo(data);
+        })
+        .catch((err) => {
+          console.warn("Shared link error:", err);
+          showToast(err.message || "Shared list link is invalid or expired.");
+          cleanShareUrl();
+        });
+    }
+  }, [cleanShareUrl, showToast]);
+
+  const handleAuthenticated = async (token, name, initialBoard) => {
     syncRef.current.token = token;
     ls.set("listbook:session", { token, name });
-    ls.set("listbook:cachedBoard", initialBoard);
     setUserName(name);
+
+    if (sharedInfo?.shareId) {
+      try {
+        const res = await apiAcceptSharedList(token, sharedInfo.shareId);
+        const updatedBoard = res.board;
+        ls.set("listbook:cachedBoard", updatedBoard);
+        setBoard(updatedBoard);
+        setViewing(true);
+        showToast(
+          `List "${res.addedList?.name || sharedInfo.list?.name}" added to your ListBook!`
+        );
+        cleanShareUrl();
+        setSharedInfo(null);
+        return;
+      } catch (err) {
+        console.error("Failed to auto-accept share:", err);
+        showToast("Couldn't add shared list automatically: " + err.message);
+      }
+    }
+
+    ls.set("listbook:cachedBoard", initialBoard);
     setBoard(initialBoard);
   };
 
@@ -144,7 +216,11 @@ export default function App() {
   if (!board) {
     return (
       <>
-        <LoginScreen booting={booting} onAuthenticated={handleAuthenticated} />
+        <LoginScreen
+          booting={booting}
+          onAuthenticated={handleAuthenticated}
+          sharedInfo={sharedInfo}
+        />
         <Toast toastState={toastState} />
       </>
     );
@@ -320,6 +396,7 @@ export default function App() {
           activeId={activeList?.id}
           onSelectList={handleSelectList}
           onToggleStarList={handleToggleStarList}
+          onShareList={(list) => setSharingList(list)}
           onCreateList={handleCreateList}
           onReorderLists={handleReorderLists}
           onSignOut={signOut}
@@ -334,6 +411,7 @@ export default function App() {
           }}
           onRenameList={handleRenameList}
           onToggleStarList={handleToggleStarList}
+          onShareList={(list) => setSharingList(list || activeList)}
           onDeleteList={handleDeleteList}
           onAddTodo={handleAddTodo}
           onToggleTodoDone={handleToggleTodoDone}
@@ -345,6 +423,37 @@ export default function App() {
           composerInputRef={composerInputRef}
         />
       </div>
+
+      {sharingList && (
+        <ShareModal
+          list={sharingList}
+          token={syncRef.current.token}
+          onClose={() => setSharingList(null)}
+          showToast={showToast}
+        />
+      )}
+
+      {sharedInfo && (
+        <AcceptShareModal
+          sharedInfo={sharedInfo}
+          token={syncRef.current.token}
+          onAccepted={(addedList, updatedBoard) => {
+            setBoard(updatedBoard);
+            ls.set("listbook:cachedBoard", updatedBoard);
+            setViewing(true);
+            cleanShareUrl();
+            setSharedInfo(null);
+            showToast(
+              `List "${addedList?.name || sharedInfo.list?.name}" added to your ListBook!`
+            );
+          }}
+          onDismiss={() => {
+            cleanShareUrl();
+            setSharedInfo(null);
+          }}
+        />
+      )}
+
       <Toast toastState={toastState} />
     </>
   );

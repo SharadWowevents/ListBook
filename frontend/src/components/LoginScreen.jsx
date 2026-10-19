@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { apiLogin } from "../utils/api";
 
-export default function LoginScreen({ booting, onAuthenticated }) {
+export default function LoginScreen({ booting, onAuthenticated, sharedInfo }) {
   const [name, setName] = useState("");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
@@ -42,9 +42,23 @@ export default function LoginScreen({ booting, onAuthenticated }) {
             List<span>book</span>
           </div>
         </div>
-        <p className="tag">
-          Lists and todos in the order you want them. Star what matters and it stays on top.
-        </p>
+
+        {sharedInfo?.list ? (
+          <div className="shared-invite-banner">
+            <div className="shared-invite-badge">Incoming Shared List</div>
+            <div className="shared-invite-title">“{sharedInfo.list.name}”</div>
+            <div className="shared-invite-sub">
+              <b>{sharedInfo.sharedBy}</b> shared this list ({sharedInfo.list.todos?.length || 0} tasks) with you.
+            </div>
+            <p className="shared-invite-tip">
+              👉 Sign in with your existing account, or choose a new username and 4-digit PIN to <b>create an account first</b>. This list will be added to your ListBook immediately!
+            </p>
+          </div>
+        ) : (
+          <p className="tag">
+            Lists and todos in the order you want them. Star what matters and it stays on top.
+          </p>
+        )}
 
         {booting ? (
           <p className="waiting">Loading your lists…</p>
