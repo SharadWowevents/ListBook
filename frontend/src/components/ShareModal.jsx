@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Icons } from "./Icons";
 import { apiShareWithUser, apiCreateShareLink } from "../utils/api";
+import { ls } from "../utils/helpers";
 
 export default function ShareModal({ list, token, onClose, showToast }) {
   const [tab, setTab] = useState("user"); // 'user' | 'link'
@@ -15,6 +16,7 @@ export default function ShareModal({ list, token, onClose, showToast }) {
   const [linkError, setLinkError] = useState("");
 
   const inputRef = useRef(null);
+  const fetchAttemptedRef = useRef(false);
 
   useEffect(() => {
     if (tab === "user") {
@@ -22,31 +24,31 @@ export default function ShareModal({ list, token, onClose, showToast }) {
     }
   }, [tab]);
 
-  // Load share link when link tab is selected
-  useEffect(() => {
-    if (tab === "link" && !shareLink && !loadingLink) {
-      let isMounted = true;
-      async function generateLink() {
-        setLoadingLink(true);
-        setLinkError("");
-        try {
-          const res = await apiCreateShareLink(token, list);
-          if (isMounted) {
-            const url = `${window.location.origin}/?share=${res.shareId}`;
-            setShareLink(url);
-          }
-        } catch (err) {
-          if (isMounted) setLinkError(err.message || "Failed to create share link.");
-        } finally {
-          if (isMounted) setLoadingLink(false);
-        }
+  const generateLink = useCallback(async () => {
+    setLoadingLink(true);
+    setLinkError("");
+    try {
+      const authToken = token || ls.get("listbook:session")?.token;
+      if (!authToken) {
+        throw new Error("You must be signed in to generate a share link.");
       }
-      generateLink();
-      return () => {
-        isMounted = false;
-      };
+      const res = await apiCreateShareLink(authToken, list);
+      const url = `${window.location.origin}/?share=${res.shareId}`;
+      setShareLink(url);
+    } catch (err) {
+      console.error("Generate share link error:", err);
+      setLinkError(err.message || "Failed to create share link.");
+    } finally {
+      setLoadingLink(false);
     }
-  }, [tab, shareLink, loadingLink, token, list]);
+  }, [token, list]);
+
+  useEffect(() => {
+    if (tab === "link" && !shareLink && !fetchAttemptedRef.current) {
+      fetchAttemptedRef.current = true;
+      generateLink();
+    }
+  }, [tab, shareLink, generateLink]);
 
   const handleShareUserSubmit = async (e) => {
     e.preventDefault();
@@ -61,7 +63,8 @@ export default function ShareModal({ list, token, onClose, showToast }) {
     setUserSuccess("");
 
     try {
-      const res = await apiShareWithUser(token, list, trimmed);
+      const authToken = token || ls.get("listbook:session")?.token;
+      const res = await apiShareWithUser(authToken, list, trimmed);
       setUserSuccess(res.message || `Shared with ${trimmed}!`);
       showToast(res.message || `List "${list.name}" shared with ${trimmed}!`);
       setTimeout(() => {
@@ -69,7 +72,10 @@ export default function ShareModal({ list, token, onClose, showToast }) {
       }, 1400);
     } catch (err) {
       const msg = err.message || "";
-      if (msg.toLowerCase().includes("user does not exist") || msg.toLowerCase().includes("not exist")) {
+      if (
+        msg.toLowerCase().includes("user does not exist") ||
+        msg.toLowerCase().includes("not exist")
+      ) {
         setUserError("User does not exist");
       } else {
         setUserError(msg || "Failed to share list.");
@@ -194,7 +200,32 @@ export default function ShareModal({ list, token, onClose, showToast }) {
             {loadingLink ? (
               <div className="modal-loading">Generating secure link...</div>
             ) : linkError ? (
-              <div className="modal-error">{linkError}</div>
+              <div
+                className="modal-error"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                  alignItems: "flex-start",
+                }}
+              >
+                <span>{linkError}</span>
+                <button
+                  type="button"
+                  className="btn secondary"
+                  style={{
+                    width: "auto",
+                    padding: "6px 14px",
+                    fontSize: "0.85rem",
+                  }}
+                  onClick={() => {
+                    fetchAttemptedRef.current = true;
+                    generateLink();
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
             ) : (
               <div className="link-copy-box">
                 <input
