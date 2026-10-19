@@ -1,0 +1,8 @@
+{
+  "resource": "https://listbook.wowosapps.com/api/mcp",
+  "authorization_servers": [
+    "https://listbook.wowosapps.com"
+  ],
+  "scopes_supported": ["read", "write"],
+  "bearer_methods_supported": ["header"]
+}
