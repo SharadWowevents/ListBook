@@ -19,7 +19,6 @@ app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 
 // Discovery routes (RFC 8414 & RFC 9728)
-a// Discovery routes (RFC 8414 & RFC 9728)
 app.get(
   [
     "/.well-known/oauth-authorization-server",
