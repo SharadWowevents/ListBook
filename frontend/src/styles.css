@@ -69,7 +69,27 @@ svg { display: block; }
 .side-brand { font-family: var(--display); font-weight: 700; font-size: 1.6rem; letter-spacing: -.02em; }
 .side-brand span { color: var(--accent); }
 .who { display: flex; align-items: center; gap: 10px; font-size: .95rem; color: var(--muted); min-width: 0; }
-.who b { font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+.who-user { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.who-avatar {
+  width: 24px; height: 24px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-ink);
+  display: grid; place-items: center; font-size: 0.72rem;
+  font-weight: 700; flex-shrink: 0;
+}
+.who b { font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 95px; }
+.signout-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.82rem; font-weight: 600; padding: 6px 11px;
+  border-radius: 9px; background: var(--soft); color: var(--muted);
+  border: 1px solid var(--line); transition: all 0.15s ease;
+  white-space: nowrap; cursor: pointer; flex-shrink: 0;
+}
+.signout-btn:hover {
+  background: color-mix(in srgb, var(--danger) 12%, var(--soft));
+  color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent);
+}
+.signout-btn svg { flex-shrink: 0; transition: transform 0.15s ease; }
+.signout-btn:hover svg { transform: translateX(1.5px); }
 .link { font-size: .95rem; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
 .add-list { display: flex; align-items: center; gap: 12px; font-family: var(--display); font-size: 1.6rem; font-weight: 600; letter-spacing: -.01em; padding: 8px 0; color: var(--ink); }
 .add-list .plus { width: 40px; height: 40px; border-radius: 12px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; }

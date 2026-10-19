@@ -88,9 +88,19 @@ export default function Sidebar({
             List<span>book</span>
           </div>
           <div className="who">
-            <b>{userName}</b>
-            <button className="link" onClick={onSignOut}>
-              Sign out
+            <span className="who-user" title={`Signed in as ${userName}`}>
+              <span className="who-avatar">{userName ? userName[0].toUpperCase() : "U"}</span>
+              <b>{userName}</b>
+            </span>
+            <button
+              type="button"
+              className="signout-btn"
+              onClick={onSignOut}
+              title="Sign out"
+              aria-label="Sign out"
+            >
+              <Icons.LogOut />
+              <span>Sign out</span>
             </button>
           </div>
         </div>
