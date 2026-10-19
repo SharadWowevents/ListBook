@@ -653,9 +653,9 @@ function renderSuccessPage({ user, token, req }) {
 // ============================================================================
 
 // RFC 8414 & RFC 9728 Discovery Endpoints
-router.get(["/.well-known/oauth-authorization-server*", "/.well-known/oauth-authorization-server"], getDiscoveryMetadata);
-router.get(["/.well-known/oauth-protected-resource*", "/.well-known/oauth-protected-resource"], getProtectedResourceMetadata);
-router.get(["/.well-known/openid-configuration*", "/.well-known/openid-configuration"], getDiscoveryMetadata);
+router.get("/.well-known/oauth-authorization-server", getDiscoveryMetadata);
+router.get("/.well-known/oauth-protected-resource", getProtectedResourceMetadata);
+router.get("/.well-known/openid-configuration", getDiscoveryMetadata);
 router.post(["/register", "/api/mcp/register"], registrationHandler);
 
 // GET /api/mcp and /api/mcp/authorize:
