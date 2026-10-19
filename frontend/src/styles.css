@@ -80,7 +80,7 @@ svg { display: block; }
 .signout-btn {
   display: inline-flex; align-items: center; gap: 6px;
   font-size: 0.82rem; font-weight: 600; padding: 6px 11px;
-  border-radius: 9px; background: var(--soft); color: var(--muted);
+  border-radius: 9px; color: var(--muted);
   border: 1px solid var(--line); transition: all 0.15s ease;
   white-space: nowrap; cursor: pointer; flex-shrink: 0;
 }
@@ -329,7 +329,12 @@ svg { display: block; }
   opacity: 1;
 }
 .share-btn:hover {
-  color: var(--accent);
+  color: #1E6B57;
+}
+.share-btn.shared,
+.share-btn.shared-by-someone {
+  color: #1E6B57 !important;
+  opacity: 1 !important;
 }
 
 .modal-overlay {
@@ -771,4 +776,11 @@ svg { display: block; }
   width: 16px;
   height: 16px;
   object-fit: contain;
+  transition: filter 0.15s ease;
+}
+
+.share-btn.shared .share-icon,
+.share-btn.shared-by-someone .share-icon,
+.share-btn:hover .share-icon {
+  filter: invert(34%) sepia(41%) saturate(928%) hue-rotate(117deg) brightness(96%) contrast(88%);
 }

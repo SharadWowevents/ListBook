@@ -62,6 +62,15 @@ export default function MainPane({
   const canShare = activeList.canShare !== false;
   const isOwner =
     activeList.permission === "owner" || !activeList.originalOwner;
+  const isSharedBySomeone = Boolean(
+    activeList.originalOwner ||
+    activeList.ownerUsername ||
+    (activeList.permission && activeList.permission !== "owner") ||
+    activeList.sourceShareId
+  );
+  const isShared =
+    isSharedBySomeone ||
+    Boolean(activeList.sharedWith && activeList.sharedWith.length > 0);
 
   const handleTitleBlur = () => {
     if (isReadOnly) return;
@@ -136,10 +145,16 @@ export default function MainPane({
         <div className="head-actions">
           {canShare && (
             <button
-              className="icon-btn share-btn"
+              className={`icon-btn share-btn ${isShared ? "shared" : ""} ${isSharedBySomeone ? "shared-by-someone" : ""}`}
               onClick={() => onShareList(activeList)}
               aria-label={`Share ${activeList.name}`}
-              title="Share list"
+              title={
+                isSharedBySomeone
+                  ? `Shared by ${activeList.ownerUsername || activeList.originalOwner || "someone"}`
+                  : isShared
+                  ? "Shared list"
+                  : `Share ${activeList.name}`
+              }
             >
               <img
                 src="/send.png"

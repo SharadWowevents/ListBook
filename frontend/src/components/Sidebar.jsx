@@ -43,6 +43,16 @@ export default function Sidebar({
 
   const renderListRow = (l) => {
     const openCount = l.todos.filter((t) => !t.done).length;
+    const isSharedBySomeone = Boolean(
+      l.originalOwner ||
+      l.ownerUsername ||
+      (l.permission && l.permission !== "owner") ||
+      l.sourceShareId
+    );
+    const isShared =
+      isSharedBySomeone ||
+      Boolean(l.sharedWith && l.sharedWith.length > 0);
+
     return (
       <div
         key={l.id}
@@ -58,13 +68,19 @@ export default function Sidebar({
         </button>
         {l.canShare !== false && (
           <button
-            className="icon-btn share-btn"
+            className={`icon-btn share-btn ${isShared ? "shared" : ""} ${isSharedBySomeone ? "shared-by-someone" : ""}`}
             onClick={(e) => {
               e.stopPropagation();
               onShareList(l);
             }}
             aria-label={`Share ${l.name}`}
-            title="Share list"
+            title={
+              isSharedBySomeone
+                ? `Shared by ${l.ownerUsername || l.originalOwner || "someone"}`
+                : isShared
+                ? "Shared list"
+                : `Share ${l.name}`
+            }
           >
             <img
               src="/send.png"
