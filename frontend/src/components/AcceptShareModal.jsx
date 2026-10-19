@@ -83,3 +83,4 @@ export default function AcceptShareModal({ sharedInfo, token, onAccepted, onDism
     </div>
   );
 }
+

@@ -232,3 +232,4 @@ export default function ShareModal({ list, token, onClose, showToast }) {
     </div>
   );
 }
+

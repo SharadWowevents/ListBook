@@ -29,3 +29,4 @@ const SharedListSchema = new mongoose.Schema(
 );
 
 module.exports = mongoose.model("SharedList", SharedListSchema);
+
