@@ -4,16 +4,23 @@ import {
   apiShareWithUser,
   apiCreateShareLink,
   apiGetListMembers,
+  apiUpdateMemberPermission,
+  apiRemoveMember,
 } from "../utils/api";
 import { ls } from "../utils/helpers";
 
 export default function ShareModal({ list, token, onClose, showToast }) {
   const [tab, setTab] = useState("user"); // 'user' | 'link' | 'members'
   const [targetUsername, setTargetUsername] = useState("");
+  const [userPermission, setUserPermission] = useState("write"); // 'write' | 'read'
+  const [userCanShare, setUserCanShare] = useState(true);
+
   const [sharingUser, setSharingUser] = useState(false);
   const [userError, setUserError] = useState("");
   const [userSuccess, setUserSuccess] = useState("");
 
+  const [linkPermission, setLinkPermission] = useState("write");
+  const [linkCanShare, setLinkCanShare] = useState(true);
   const [shareLink, setShareLink] = useState("");
   const [loadingLink, setLoadingLink] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -21,10 +28,13 @@ export default function ShareModal({ list, token, onClose, showToast }) {
 
   const [members, setMembers] = useState(list.sharedWith || []);
   const [originalOwner, setOriginalOwner] = useState(list.originalOwner || null);
+  const [isOwner, setIsOwner] = useState(
+    list.permission === "owner" || !list.originalOwner
+  );
   const [loadingMembers, setLoadingMembers] = useState(false);
+  const [updatingMember, setUpdatingMember] = useState("");
 
   const inputRef = useRef(null);
-  const fetchAttemptedRef = useRef(false);
 
   useEffect(() => {
     if (tab === "user") {
@@ -44,6 +54,7 @@ export default function ShareModal({ list, token, onClose, showToast }) {
         if (isMounted) {
           if (Array.isArray(res.members)) setMembers(res.members);
           if (res.originalOwner) setOriginalOwner(res.originalOwner);
+          if (res.currentUser) setIsOwner(Boolean(res.currentUser.isOwner));
         }
       } catch (err) {
         console.warn("Could not fetch members:", err);
@@ -57,31 +68,43 @@ export default function ShareModal({ list, token, onClose, showToast }) {
     };
   }, [token, list.id]);
 
-  const generateLink = useCallback(async () => {
-    setLoadingLink(true);
-    setLinkError("");
-    try {
-      const authToken = token || ls.get("listbook:session")?.token;
-      if (!authToken) {
-        throw new Error("You must be signed in to generate a share link.");
+  const generateLink = useCallback(
+    async (perm = linkPermission, canShare = linkCanShare) => {
+      setLoadingLink(true);
+      setLinkError("");
+      try {
+        const authToken = token || ls.get("listbook:session")?.token;
+        if (!authToken) {
+          throw new Error("You must be signed in to generate a share link.");
+        }
+        const res = await apiCreateShareLink(authToken, list, perm, canShare);
+        const url = `${window.location.origin}/?share=${res.shareId}`;
+        setShareLink(url);
+      } catch (err) {
+        console.error("Generate share link error:", err);
+        setLinkError(err.message || "Failed to create share link.");
+      } finally {
+        setLoadingLink(false);
       }
-      const res = await apiCreateShareLink(authToken, list);
-      const url = `${window.location.origin}/?share=${res.shareId}`;
-      setShareLink(url);
-    } catch (err) {
-      console.error("Generate share link error:", err);
-      setLinkError(err.message || "Failed to create share link.");
-    } finally {
-      setLoadingLink(false);
-    }
-  }, [token, list]);
+    },
+    [token, list, linkPermission, linkCanShare]
+  );
 
   useEffect(() => {
-    if (tab === "link" && !shareLink && !fetchAttemptedRef.current) {
-      fetchAttemptedRef.current = true;
-      generateLink();
+    if (tab === "link" && !shareLink) {
+      generateLink(linkPermission, linkCanShare);
     }
-  }, [tab, shareLink, generateLink]);
+  }, [tab, shareLink, linkPermission, linkCanShare, generateLink]);
+
+  const handleLinkPermChange = (newPerm) => {
+    setLinkPermission(newPerm);
+    generateLink(newPerm, linkCanShare);
+  };
+
+  const handleLinkCanShareChange = (newCanShare) => {
+    setLinkCanShare(newCanShare);
+    generateLink(linkPermission, newCanShare);
+  };
 
   const handleShareUserSubmit = async (e) => {
     e.preventDefault();
@@ -97,7 +120,13 @@ export default function ShareModal({ list, token, onClose, showToast }) {
 
     try {
       const authToken = token || ls.get("listbook:session")?.token;
-      const res = await apiShareWithUser(authToken, list, trimmed);
+      const res = await apiShareWithUser(
+        authToken,
+        list,
+        trimmed,
+        userPermission,
+        userCanShare
+      );
       setUserSuccess(res.message || `Shared with ${trimmed}!`);
       showToast(res.message || `List "${list.name}" shared with ${trimmed}!`);
 
@@ -105,7 +134,8 @@ export default function ShareModal({ list, token, onClose, showToast }) {
         setMembers((prev) => [
           res.member,
           ...prev.filter(
-            (m) => m.username.toLowerCase() !== res.member.username.toLowerCase()
+            (m) =>
+              m.username.toLowerCase() !== res.member.username.toLowerCase()
           ),
         ]);
       }
@@ -133,7 +163,6 @@ export default function ShareModal({ list, token, onClose, showToast }) {
       showToast("Share link copied to clipboard!");
       setTimeout(() => setLinkCopied(false), 2400);
     } catch {
-      // Fallback
       const ta = document.createElement("textarea");
       ta.value = shareLink;
       document.body.appendChild(ta);
@@ -143,6 +172,49 @@ export default function ShareModal({ list, token, onClose, showToast }) {
       setLinkCopied(true);
       showToast("Share link copied to clipboard!");
       setTimeout(() => setLinkCopied(false), 2400);
+    }
+  };
+
+  const handleUpdatePermission = async (targetUsername, newPerm, newCanShare) => {
+    setUpdatingMember(targetUsername);
+    try {
+      const authToken = token || ls.get("listbook:session")?.token;
+      await apiUpdateMemberPermission(
+        authToken,
+        list.id,
+        targetUsername,
+        newPerm,
+        newCanShare
+      );
+      setMembers((prev) =>
+        prev.map((m) =>
+          m.username.toLowerCase() === targetUsername.toLowerCase()
+            ? { ...m, permission: newPerm, canShare: newCanShare }
+            : m
+        )
+      );
+      showToast(`Updated permissions for @${targetUsername}.`);
+    } catch (err) {
+      showToast(err.message || "Failed to update member permission.");
+    } finally {
+      setUpdatingMember("");
+    }
+  };
+
+  const handleRemoveMember = async (targetUsername) => {
+    if (!window.confirm(`Remove @${targetUsername} from this list?`)) return;
+    setUpdatingMember(targetUsername);
+    try {
+      const authToken = token || ls.get("listbook:session")?.token;
+      await apiRemoveMember(authToken, list.id, targetUsername);
+      setMembers((prev) =>
+        prev.filter((m) => m.username.toLowerCase() !== targetUsername.toLowerCase())
+      );
+      showToast(`Removed @${targetUsername} from this list.`);
+    } catch (err) {
+      showToast(err.message || "Failed to remove member.");
+    } finally {
+      setUpdatingMember("");
     }
   };
 
@@ -200,8 +272,8 @@ export default function ShareModal({ list, token, onClose, showToast }) {
         {tab === "user" ? (
           <form className="modal-body" onSubmit={handleShareUserSubmit}>
             <p className="modal-desc">
-              Send a copy of this list directly into another registered user’s
-              ListBook account.
+              Send this list directly into another registered user’s ListBook
+              with custom permissions.
             </p>
 
             <div className="field">
@@ -222,6 +294,48 @@ export default function ShareModal({ list, token, onClose, showToast }) {
               />
             </div>
 
+            {/* Permission Selector */}
+            <div className="perm-group">
+              <div className="perm-group-label">Permissions</div>
+              <div className="perm-options">
+                <button
+                  type="button"
+                  className={`perm-btn ${
+                    userPermission === "write" ? "active" : ""
+                  }`}
+                  onClick={() => {
+                    setUserPermission("write");
+                    setUserCanShare(true);
+                  }}
+                >
+                  <span className="perm-title">Editor</span>
+                  <span className="perm-sub">Can view, add, edit & check todos</span>
+                </button>
+                <button
+                  type="button"
+                  className={`perm-btn ${
+                    userPermission === "read" ? "active" : ""
+                  }`}
+                  onClick={() => {
+                    setUserPermission("read");
+                    setUserCanShare(false);
+                  }}
+                >
+                  <span className="perm-title">Viewer</span>
+                  <span className="perm-sub">Can only view todos</span>
+                </button>
+              </div>
+
+              <label className="perm-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={userCanShare}
+                  onChange={(e) => setUserCanShare(e.target.checked)}
+                />
+                <span>Allow this user to share this list with others</span>
+              </label>
+            </div>
+
             {userError && <div className="modal-error">{userError}</div>}
             {userSuccess && <div className="modal-success">{userSuccess}</div>}
 
@@ -233,11 +347,12 @@ export default function ShareModal({ list, token, onClose, showToast }) {
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "space-between",
-                  marginTop: 2,
+                  marginTop: 4,
                 }}
               >
                 <span>
-                  Shared with <b>{members.length}</b> {members.length === 1 ? "user" : "users"}
+                  Currently shared with <b>{members.length}</b>{" "}
+                  {members.length === 1 ? "user" : "users"}
                 </span>
                 <button
                   type="button"
@@ -277,9 +392,45 @@ export default function ShareModal({ list, token, onClose, showToast }) {
         ) : tab === "link" ? (
           <div className="modal-body">
             <p className="modal-desc">
-              Anyone with this link can view and import a copy of “{list.name}”
-              into their ListBook account.
+              Anyone with this link can view or edit “{list.name}” based on the
+              permission chosen below.
             </p>
+
+            {/* Link Permissions */}
+            <div className="perm-group">
+              <div className="perm-group-label">Link Permissions</div>
+              <div className="perm-options">
+                <button
+                  type="button"
+                  className={`perm-btn ${
+                    linkPermission === "write" ? "active" : ""
+                  }`}
+                  onClick={() => handleLinkPermChange("write")}
+                >
+                  <span className="perm-title">Can Edit (Editor)</span>
+                  <span className="perm-sub">Recipients can modify tasks</span>
+                </button>
+                <button
+                  type="button"
+                  className={`perm-btn ${
+                    linkPermission === "read" ? "active" : ""
+                  }`}
+                  onClick={() => handleLinkPermChange("read")}
+                >
+                  <span className="perm-title">Can View (Viewer)</span>
+                  <span className="perm-sub">Recipients can only view tasks</span>
+                </button>
+              </div>
+
+              <label className="perm-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={linkCanShare}
+                  onChange={(e) => handleLinkCanShareChange(e.target.checked)}
+                />
+                <span>Allow link recipients to share this list with others</span>
+              </label>
+            </div>
 
             {loadingLink ? (
               <div className="modal-loading">Generating secure link...</div>
@@ -302,10 +453,7 @@ export default function ShareModal({ list, token, onClose, showToast }) {
                     padding: "6px 14px",
                     fontSize: "0.85rem",
                   }}
-                  onClick={() => {
-                    fetchAttemptedRef.current = true;
-                    generateLink();
-                  }}
+                  onClick={() => generateLink(linkPermission, linkCanShare)}
                 >
                   Retry
                 </button>
@@ -345,7 +493,7 @@ export default function ShareModal({ list, token, onClose, showToast }) {
         ) : (
           <div className="modal-body">
             <p className="modal-desc">
-              Users who have received or are associated with <b>“{list.name}”</b>.
+              Manage collaborators and permissions for <b>“{list.name}”</b>.
             </p>
 
             {/* Creator / Owner Card */}
@@ -371,7 +519,7 @@ export default function ShareModal({ list, token, onClose, showToast }) {
               </div>
             </div>
 
-            {/* Collaborators / Shared Members List */}
+            {/* Collaborators List */}
             <div className="members-section" style={{ marginTop: 4 }}>
               <div className="members-section-label">
                 Shared With ({members.length})
@@ -424,13 +572,62 @@ export default function ShareModal({ list, token, onClose, showToast }) {
                           )}
                         </div>
                       </div>
-                      <span
-                        className={`member-tag ${
-                          m.via === "link" ? "via-link" : "via-user"
-                        }`}
-                      >
-                        {m.via === "link" ? "via Link" : "via Username"}
-                      </span>
+
+                      {/* Permissions dropdown & action for Owner */}
+                      {isOwner ? (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: 6,
+                          }}
+                        >
+                          <select
+                            className="member-perm-select"
+                            value={m.permission || "write"}
+                            disabled={updatingMember === m.username}
+                            onChange={(e) =>
+                              handleUpdatePermission(
+                                m.username,
+                                e.target.value,
+                                m.canShare
+                              )
+                            }
+                          >
+                            <option value="write">Editor</option>
+                            <option value="read">Viewer</option>
+                          </select>
+
+                          <button
+                            type="button"
+                            className="member-remove-btn"
+                            title={`Remove @${m.username}`}
+                            aria-label={`Remove @${m.username}`}
+                            disabled={updatingMember === m.username}
+                            onClick={() => handleRemoveMember(m.username)}
+                          >
+                            <Icons.X />
+                          </button>
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            display: "flex",
+                            gap: 4,
+                            alignItems: "center",
+                          }}
+                        >
+                          <span
+                            className={`member-tag ${
+                              m.permission === "read"
+                                ? "via-link"
+                                : "via-user"
+                            }`}
+                          >
+                            {m.permission === "read" ? "Viewer" : "Editor"}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

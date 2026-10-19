@@ -39,6 +39,8 @@ const SharedMemberSchema = new mongoose.Schema(
   {
     username: { type: String, required: true },
     displayName: { type: String, required: true },
+    permission: { type: String, enum: ["read", "write"], default: "write" },
+    canShare: { type: Boolean, default: true },
     sharedAt: { type: Number, default: () => Date.now() },
     via: { type: String, default: "username" }, // 'username' | 'link'
   },
@@ -51,8 +53,16 @@ const ListSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true, maxlength: 60 },
     starred: { type: Boolean, default: false },
     todos: [TodoSchema],
+    sharedListId: { type: String, default: null, index: true },
     sourceShareId: { type: String, default: null },
+    ownerUsername: { type: String, default: null },
     originalOwner: { type: String, default: null },
+    permission: {
+      type: String,
+      enum: ["owner", "write", "read"],
+      default: "owner",
+    },
+    canShare: { type: Boolean, default: true },
     sharedWith: { type: [SharedMemberSchema], default: [] },
   },
   { _id: false }

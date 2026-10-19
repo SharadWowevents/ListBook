@@ -54,7 +54,13 @@ export default function MainPane({
   const done = activeList.todos.filter((t) => t.done);
   const total = activeList.todos.length;
 
+  const isReadOnly = activeList.permission === "read";
+  const canShare = activeList.canShare !== false;
+  const isOwner =
+    activeList.permission === "owner" || !activeList.originalOwner;
+
   const handleTitleBlur = () => {
+    if (isReadOnly) return;
     const trimmed = titleText.trim();
     if (trimmed && trimmed !== activeList.name) {
       onRenameList(activeList.id, trimmed);
@@ -64,6 +70,7 @@ export default function MainPane({
   };
 
   const handleAddAndScroll = (text) => {
+    if (isReadOnly) return;
     onAddTodo(text);
     setTimeout(() => {
       if (todosContainerRef.current) {
@@ -77,6 +84,7 @@ export default function MainPane({
     <TodoItem
       key={t.id}
       todo={t}
+      readOnly={isReadOnly}
       onToggleDone={onToggleTodoDone}
       onToggleStar={onToggleTodoStar}
       onDelete={onDeleteTodo}
@@ -100,27 +108,38 @@ export default function MainPane({
             value={titleText}
             aria-label="List name"
             maxLength={60}
-            onChange={(e) => setTitleText(e.target.value)}
+            readOnly={isReadOnly}
+            onChange={(e) => !isReadOnly && setTitleText(e.target.value)}
             onBlur={handleTitleBlur}
             onKeyDown={(e) => {
               if (e.key === "Enter") e.currentTarget.blur();
             }}
           />
-          <div className="sub">
-            {total
-              ? `${total - done.length} open · ${done.length} done`
-              : "No todos yet"}
+          <div
+            className="sub"
+            style={{ display: "flex", alignItems: "center", gap: 8 }}
+          >
+            <span>
+              {total
+                ? `${total - done.length} open · ${done.length} done`
+                : "No todos yet"}
+            </span>
+            {isReadOnly && (
+              <span className="view-only-badge">👁 View only</span>
+            )}
           </div>
         </div>
         <div className="head-actions">
-          <button
-            className="icon-btn share-btn"
-            onClick={() => onShareList(activeList)}
-            aria-label={`Share ${activeList.name}`}
-            title="Share list"
-          >
-            <Icons.Share />
-          </button>
+          {canShare && (
+            <button
+              className="icon-btn share-btn"
+              onClick={() => onShareList(activeList)}
+              aria-label={`Share ${activeList.name}`}
+              title="Share list"
+            >
+              <Icons.Share />
+            </button>
+          )}
           <button
             className={`icon-btn star-btn ${activeList.starred ? "on" : ""}`}
             onClick={() => onToggleStarList(activeList.id)}
@@ -131,7 +150,8 @@ export default function MainPane({
           <button
             className="icon-btn"
             onClick={() => setConfirmDelete(true)}
-            aria-label="Delete list"
+            aria-label={isOwner ? "Delete list" : "Leave list"}
+            title={isOwner ? "Delete list" : "Leave list"}
           >
             <Icons.Trash />
           </button>
@@ -141,8 +161,11 @@ export default function MainPane({
       {confirmDelete && (
         <div className="confirm">
           <span>
-            Delete “{activeList.name}” and its {total} todo
-            {total === 1 ? "" : "s"}?
+            {isOwner
+              ? `Delete “${activeList.name}” and its ${total} todo${
+                  total === 1 ? "" : "s"
+                }?`
+              : `Leave “${activeList.name}”? You can be re-invited later.`}
           </span>
           <button
             className="pill plain"
@@ -154,7 +177,7 @@ export default function MainPane({
             className="pill danger"
             onClick={() => onDeleteList(activeList.id)}
           >
-            Delete list
+            {isOwner ? "Delete list" : "Leave list"}
           </button>
         </div>
       )}
@@ -163,19 +186,27 @@ export default function MainPane({
         <div className="todo-inner">
           {!total && (
             <p className="empty">
-              Nothing here yet. Type below or tap the mic and say your first todo.
+              {isReadOnly
+                ? "No tasks in this list yet."
+                : "Nothing here yet. Type below or tap the mic and say your first todo."}
             </p>
           )}
 
           {sOpen.length > 0 && <div className="sec-label">Starred</div>}
-          <SortableGroup groupName="todo-starred" onReorder={onReorderTodos}>
+          <SortableGroup
+            groupName="todo-starred"
+            onReorder={isReadOnly ? () => {} : onReorderTodos}
+          >
             {sOpen.map(renderTodo)}
           </SortableGroup>
 
           {sOpen.length > 0 && open.length > 0 && (
             <div className="sec-label">Todos</div>
           )}
-          <SortableGroup groupName="todo-open" onReorder={onReorderTodos}>
+          <SortableGroup
+            groupName="todo-open"
+            onReorder={isReadOnly ? () => {} : onReorderTodos}
+          >
             {open.map(renderTodo)}
           </SortableGroup>
 
@@ -189,7 +220,10 @@ export default function MainPane({
                 {done.length}
               </button>
               {showDone && (
-                <SortableGroup groupName="todo-done" onReorder={onReorderTodos}>
+                <SortableGroup
+                  groupName="todo-done"
+                  onReorder={isReadOnly ? () => {} : onReorderTodos}
+                >
                   {done.map(renderTodo)}
                 </SortableGroup>
               )}
@@ -198,11 +232,26 @@ export default function MainPane({
         </div>
       </div>
 
-      <Composer
-        onAddTodo={handleAddAndScroll}
-        showToast={showToast}
-        inputRef={composerInputRef}
-      />
+      {!isReadOnly ? (
+        <Composer
+          onAddTodo={handleAddAndScroll}
+          showToast={showToast}
+          inputRef={composerInputRef}
+        />
+      ) : (
+        <div
+          style={{
+            padding: "14px 20px",
+            color: "var(--muted)",
+            fontSize: "0.88rem",
+            borderTop: "1px solid var(--line)",
+            background: "var(--panel)",
+            textAlign: "center",
+          }}
+        >
+          You have view-only access to this list.
+        </div>
+      )}
     </main>
   );
 }

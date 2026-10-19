@@ -41,30 +41,41 @@ export async function apiSaveBoard(token, board) {
   return data;
 }
 
-// Share list with a registered username
-export async function apiShareWithUser(token, list, targetUsername) {
+// Share list with a registered username and permissions
+export async function apiShareWithUser(
+  token,
+  list,
+  targetUsername,
+  permission = "write",
+  canShare = true
+) {
   const res = await fetch(`${API_BASE}/board/share-user`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ list, targetUsername }),
+    body: JSON.stringify({ list, targetUsername, permission, canShare }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Failed to share list");
   return data;
 }
 
-// Generate public share link
-export async function apiCreateShareLink(token, list) {
+// Generate public share link with default permissions
+export async function apiCreateShareLink(
+  token,
+  list,
+  permission = "write",
+  canShare = true
+) {
   const res = await fetch(`${API_BASE}/board/share-link`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify({ list }),
+    body: JSON.stringify({ list, permission, canShare }),
   });
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Failed to create share link");
@@ -73,7 +84,9 @@ export async function apiCreateShareLink(token, list) {
 
 // Get public shared list preview
 export async function apiGetSharedList(shareId) {
-  const res = await fetch(`${API_BASE}/board/shared/${encodeURIComponent(shareId)}`);
+  const res = await fetch(
+    `${API_BASE}/board/shared/${encodeURIComponent(shareId)}`
+  );
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Failed to retrieve shared list");
   return data;
@@ -106,5 +119,63 @@ export async function apiGetListMembers(token, listId) {
   );
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || "Failed to load list members");
+  return data;
+}
+
+// Update a collaborator's permission
+export async function apiUpdateMemberPermission(
+  token,
+  listId,
+  targetUsername,
+  permission,
+  canShare
+) {
+  const res = await fetch(
+    `${API_BASE}/board/list/${encodeURIComponent(listId)}/member-permission`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ targetUsername, permission, canShare }),
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to update permission");
+  return data;
+}
+
+// Remove a collaborator from a list
+export async function apiRemoveMember(token, listId, targetUsername) {
+  const res = await fetch(
+    `${API_BASE}/board/list/${encodeURIComponent(listId)}/member/${encodeURIComponent(
+      targetUsername
+    )}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to remove member");
+  return data;
+}
+
+// Leave a shared list
+export async function apiLeaveList(token, listId) {
+  const res = await fetch(
+    `${API_BASE}/board/list/${encodeURIComponent(listId)}/leave`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || "Failed to leave list");
   return data;
 }

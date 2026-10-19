@@ -5,6 +5,7 @@ import {
   apiSaveBoard,
   apiGetSharedList,
   apiAcceptSharedList,
+  apiLeaveList,
 } from "./utils/api";
 import LoginScreen from "./components/LoginScreen";
 import Sidebar from "./components/Sidebar";
@@ -219,6 +220,46 @@ export default function App() {
     };
   }, [flush, showToast]);
 
+  // Live sync: poll for collaborator updates every 2.8s when active and not busy saving
+  useEffect(() => {
+    if (!board) return;
+
+    const interval = setInterval(async () => {
+      const S = syncRef.current;
+      // Skip polling if document is hidden, user is actively editing/saving, or not authenticated
+      if (document.hidden || S.dirty || S.saving || !S.token) return;
+
+      try {
+        const { board: remoteBoard } = await apiFetchBoard(S.token);
+        if (!remoteBoard || !Array.isArray(remoteBoard.lists)) return;
+
+        const currentUpdated = boardRef.current?.updatedAt || 0;
+        const remoteUpdated = remoteBoard.updatedAt || 0;
+
+        // Apply if remote board has newer updates from collaborators or permission changes
+        if (remoteUpdated > currentUpdated) {
+          const currentActiveId = boardRef.current?.activeId;
+          const activeStillExists = remoteBoard.lists.some(
+            (l) => l.id === currentActiveId
+          );
+          const nextBoard = {
+            ...remoteBoard,
+            activeId: activeStillExists
+              ? currentActiveId
+              : remoteBoard.activeId || remoteBoard.lists[0]?.id || null,
+          };
+          boardRef.current = nextBoard;
+          ls.set("listbook:cachedBoard", nextBoard);
+          setBoard(nextBoard);
+        }
+      } catch {
+        // Silently ignore background polling errors
+      }
+    }, 2800);
+
+    return () => clearInterval(interval);
+  }, [board !== null]);
+
   if (!board) {
     return (
       <>
@@ -275,9 +316,24 @@ export default function App() {
     }));
   };
 
-  const handleDeleteList = (id) => {
+  const handleDeleteList = async (id) => {
     setConfirmDelete(false);
     setViewing(false);
+    const target = board?.lists?.find((l) => l.id === id);
+    const isCollaborator =
+      target &&
+      (target.permission === "read" ||
+        (target.permission === "write" && target.ownerUsername) ||
+        target.originalOwner);
+
+    if (isCollaborator && syncRef.current.token) {
+      try {
+        await apiLeaveList(syncRef.current.token, id);
+      } catch (err) {
+        console.warn("Could not notify server on leave list:", err);
+      }
+    }
+
     updateBoard((prev) => {
       const remaining = prev.lists.filter((l) => l.id !== id);
       return {
@@ -286,7 +342,7 @@ export default function App() {
         activeId: remaining[0] ? remaining[0].id : null,
       };
     });
-    showToast("List deleted.");
+    showToast(isCollaborator ? "Left shared list." : "List deleted.");
   };
 
   const handleAddTodo = (text) => {

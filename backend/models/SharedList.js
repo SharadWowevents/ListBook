@@ -8,6 +8,10 @@ const SharedListSchema = new mongoose.Schema(
       unique: true,
       index: true,
     },
+    sharedListId: {
+      type: String,
+      index: true,
+    },
     list: {
       name: { type: String, required: true },
       todos: [
@@ -33,11 +37,22 @@ const SharedListSchema = new mongoose.Schema(
       type: String,
       index: true,
     },
+    defaultPermission: {
+      type: String,
+      enum: ["read", "write"],
+      default: "write",
+    },
+    defaultCanShare: {
+      type: Boolean,
+      default: true,
+    },
     claimedBy: [
       {
         userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
         username: String,
         displayName: String,
+        permission: { type: String, enum: ["read", "write"], default: "write" },
+        canShare: { type: Boolean, default: true },
         claimedAt: { type: Date, default: Date.now },
       },
     ],
