@@ -100,7 +100,7 @@ export default function Sidebar({
               aria-label="Sign out"
             >
               <Icons.LogOut />
-              <span>Sign out</span>
+              <span></span>
             </button>
           </div>
         </div>
