@@ -141,7 +141,11 @@ export default function MainPane({
               aria-label={`Share ${activeList.name}`}
               title="Share list"
             >
-              <Icons.Share />
+              <img
+                src="/send.png"
+                alt=""
+                className="share-icon"
+              />
             </button>
           )}
           <button
@@ -174,9 +178,8 @@ export default function MainPane({
         <div className="confirm">
           <span>
             {isOwner
-              ? `Delete “${activeList.name}” and its ${total} todo${
-                  total === 1 ? "" : "s"
-                }?`
+              ? `Delete “${activeList.name}” and its ${total} todo${total === 1 ? "" : "s"
+              }?`
               : `Leave “${activeList.name}”? You can be re-invited later.`}
           </span>
           <button
@@ -208,7 +211,7 @@ export default function MainPane({
             {sOpen.length > 0 && <div className="sec-label">Starred</div>}
             <SortableGroup
               groupName="todo-starred"
-              onReorder={isReadOnly ? () => {} : onReorderTodos}
+              onReorder={isReadOnly ? () => { } : onReorderTodos}
             >
               {sOpen.map(renderTodo)}
             </SortableGroup>
@@ -218,7 +221,7 @@ export default function MainPane({
             )}
             <SortableGroup
               groupName="todo-open"
-              onReorder={isReadOnly ? () => {} : onReorderTodos}
+              onReorder={isReadOnly ? () => { } : onReorderTodos}
             >
               {open.map(renderTodo)}
             </SortableGroup>
@@ -235,7 +238,7 @@ export default function MainPane({
                 {showDone && (
                   <SortableGroup
                     groupName="todo-done"
-                    onReorder={isReadOnly ? () => {} : onReorderTodos}
+                    onReorder={isReadOnly ? () => { } : onReorderTodos}
                   >
                     {done.map(renderTodo)}
                   </SortableGroup>

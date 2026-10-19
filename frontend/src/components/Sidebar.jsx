@@ -66,7 +66,11 @@ export default function Sidebar({
             aria-label={`Share ${l.name}`}
             title="Share list"
           >
-            <Icons.Share />
+            <img
+              src="/send.png"
+              alt=""
+              className="share-icon"
+            />
           </button>
         )}
         <button

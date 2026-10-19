@@ -765,3 +765,10 @@ svg { display: block; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; }
 }
+
+
+.share-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+}

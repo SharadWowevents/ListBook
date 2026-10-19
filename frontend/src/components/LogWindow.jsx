@@ -38,7 +38,11 @@ function getLogIcon(type) {
     case "reorder":
       return <Icons.Grip />;
     case "share":
-      return <Icons.Share />;
+      return <img
+        src="/send.png"
+        alt=""
+        className="share-icon"
+      />;
     case "sync":
       return <Icons.Sync />;
     default:
