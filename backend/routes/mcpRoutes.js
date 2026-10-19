@@ -1,6 +1,7 @@
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const { McpServer, ResourceTemplate } = require("@modelcontextprotocol/sdk/server/mcp.js");
 const { StreamableHTTPServerTransport } = require("@modelcontextprotocol/sdk/server/streamableHttp.js");
 const { SSEServerTransport } = require("@modelcontextprotocol/sdk/server/sse.js");
@@ -382,8 +383,103 @@ async function authenticateRequest(req) {
   return null;
 }
 
+// PKCE Verification Helper (RFC 7636)
+function verifyPkce(verifier, challenge, method) {
+  if (!challenge) return true; // No PKCE requested by client
+  if (!verifier) return false;
+  if (method === "S256" || !method) {
+    const hash = crypto.createHash("sha256").update(verifier).digest();
+    const computed = hash
+      .toString("base64")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+    return computed === challenge;
+  }
+  if (method === "plain") {
+    return verifier === challenge;
+  }
+  return false;
+}
+
+// Helper to send 401 with standard WWW-Authenticate pointing to metadata
+function sendUnauthorized(res, req, message = "Authentication required.") {
+  const origin = `${req.protocol}://${req.get("host")}`;
+  res.setHeader(
+    "WWW-Authenticate",
+    `Bearer realm="ListBook", error="unauthorized", resource_metadata="${origin}/.well-known/oauth-protected-resource"`
+  );
+  return res.status(401).json({
+    jsonrpc: "2.0",
+    error: { code: -32001, message },
+    id: null,
+  });
+}
+
+// OAuth 2.0 Authorization Server Metadata (RFC 8414 / OpenID Connect Discovery)
+function getDiscoveryMetadata(req, res) {
+  const origin = `${req.protocol}://${req.get("host")}`;
+  res.setHeader("Content-Type", "application/json");
+  return res.json({
+    issuer: origin,
+    authorization_endpoint: `${origin}/api/mcp/authorize`,
+    token_endpoint: `${origin}/api/oauth/token`,
+    registration_endpoint: `${origin}/api/mcp/register`,
+    response_types_supported: ["code"],
+    response_modes_supported: ["query"],
+    grant_types_supported: ["authorization_code", "refresh_token"],
+    token_endpoint_auth_methods_supported: ["none", "client_secret_post", "client_secret_basic"],
+    code_challenge_methods_supported: ["S256", "plain"],
+    scopes_supported: ["read", "write"],
+  });
+}
+
+// OAuth 2.0 Protected Resource Metadata (RFC 9728)
+function getProtectedResourceMetadata(req, res) {
+  const origin = `${req.protocol}://${req.get("host")}`;
+  res.setHeader("Content-Type", "application/json");
+  return res.json({
+    resource: `${origin}/api/mcp`,
+    authorization_servers: [origin],
+    scopes_supported: ["read", "write"],
+    bearer_methods_supported: ["header"],
+  });
+}
+
+// Dynamic Client Registration (RFC 7591)
+function registrationHandler(req, res) {
+  const clientId = "chatgpt-" + uid();
+  const clientSecret = uid() + uid();
+  const redirectUris = Array.isArray(req.body?.redirect_uris)
+    ? req.body.redirect_uris
+    : req.body?.redirect_uri
+    ? [req.body.redirect_uri]
+    : [];
+
+  return res.status(201).json({
+    client_id: clientId,
+    client_secret: clientSecret,
+    client_id_issued_at: Math.floor(Date.now() / 1000),
+    client_secret_expires_at: 0,
+    client_name: req.body?.client_name || "ChatGPT MCP Client",
+    redirect_uris: redirectUris,
+    grant_types: ["authorization_code", "refresh_token"],
+    response_types: ["code"],
+    token_endpoint_auth_method: req.body?.token_endpoint_auth_method || "none",
+  });
+}
+
 // HTML Login Page Template
-function renderLoginPage({ errorMessage = "", redirect_uri = "", state = "", client_id = "", response_type = "" }) {
+function renderLoginPage({
+  errorMessage = "",
+  redirect_uri = "",
+  state = "",
+  client_id = "",
+  response_type = "code",
+  code_challenge = "",
+  code_challenge_method = "",
+  scope = "",
+}) {
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -469,6 +565,9 @@ function renderLoginPage({ errorMessage = "", redirect_uri = "", state = "", cli
       <input type="hidden" name="state" value="${state}">
       <input type="hidden" name="client_id" value="${client_id}">
       <input type="hidden" name="response_type" value="${response_type}">
+      <input type="hidden" name="code_challenge" value="${code_challenge}">
+      <input type="hidden" name="code_challenge_method" value="${code_challenge_method}">
+      <input type="hidden" name="scope" value="${scope}">
 
       <div class="field">
         <label for="name">Username</label>
@@ -553,6 +652,12 @@ function renderSuccessPage({ user, token, req }) {
 // OAUTH 2.0 ENDPOINTS
 // ============================================================================
 
+// RFC 8414 & RFC 9728 Discovery Endpoints
+router.get(["/.well-known/oauth-authorization-server*", "/.well-known/oauth-authorization-server"], getDiscoveryMetadata);
+router.get(["/.well-known/oauth-protected-resource*", "/.well-known/oauth-protected-resource"], getProtectedResourceMetadata);
+router.get(["/.well-known/openid-configuration*", "/.well-known/openid-configuration"], getDiscoveryMetadata);
+router.post(["/register", "/api/mcp/register"], registrationHandler);
+
 // GET /api/mcp and /api/mcp/authorize:
 // - If browser request without bearer token: renders the Login Form!
 // - If MCP client request with Bearer token: routes to MCP handler!
@@ -581,22 +686,32 @@ router.get(["/", "/authorize"], async (req, res, next) => {
         state: req.query.state || "",
         client_id: req.query.client_id || "",
         response_type: req.query.response_type || "code",
+        code_challenge: req.query.code_challenge || "",
+        code_challenge_method: req.query.code_challenge_method || "",
+        scope: req.query.scope || "",
       })
     );
   }
 
-  // API request missing auth
-  return res.status(401).json({
-    jsonrpc: "2.0",
-    error: { code: -32001, message: "Authentication required. Visit /api/mcp to log in." },
-    id: null,
-  });
+  // API request missing auth -> return 401 with standard WWW-Authenticate
+  return sendUnauthorized(res, req, "Authentication required. Visit /api/mcp to log in.");
 });
 
 // POST /api/mcp/authorize: Handles the login form submission
 router.post(["/authorize", "/login"], async (req, res) => {
   try {
-    const { name, password, pin, redirect_uri, state, client_id } = req.body;
+    const {
+      name,
+      password,
+      pin,
+      redirect_uri,
+      state,
+      client_id,
+      response_type,
+      code_challenge,
+      code_challenge_method,
+      scope,
+    } = req.body;
     const trimmedName = (name || "").trim();
     const secret = (password || pin || "").trim();
 
@@ -607,6 +722,10 @@ router.post(["/authorize", "/login"], async (req, res) => {
           redirect_uri,
           state,
           client_id,
+          response_type,
+          code_challenge,
+          code_challenge_method,
+          scope,
         })
       );
     }
@@ -623,6 +742,10 @@ router.post(["/authorize", "/login"], async (req, res) => {
             redirect_uri,
             state,
             client_id,
+            response_type,
+            code_challenge,
+            code_challenge_method,
+            scope,
           })
         );
       }
@@ -643,12 +766,16 @@ router.post(["/authorize", "/login"], async (req, res) => {
             redirect_uri,
             state,
             client_id,
+            response_type,
+            code_challenge,
+            code_challenge_method,
+            scope,
           })
         );
       }
     }
 
-    // CASE 1: Standard OAuth Authorization Code Grant (e.g. from ChatGPT / Claude)
+    // CASE 1: Standard OAuth Authorization Code Grant (ChatGPT, Claude, etc.)
     if (redirect_uri) {
       const code = uid();
       authCodes.set(code, {
@@ -657,13 +784,22 @@ router.post(["/authorize", "/login"], async (req, res) => {
         expiresAt: Date.now() + 10 * 60 * 1000,
         clientId: client_id || "",
         redirectUri: redirect_uri,
+        codeChallenge: code_challenge || "",
+        codeChallengeMethod: code_challenge_method || "",
+        scope: scope || "read write",
       });
 
-      const redirectUrl = new URL(redirect_uri);
-      redirectUrl.searchParams.set("code", code);
-      if (state) redirectUrl.searchParams.set("state", state);
-
-      return res.redirect(redirectUrl.toString());
+      try {
+        const redirectUrl = new URL(redirect_uri);
+        redirectUrl.searchParams.set("code", code);
+        if (state) redirectUrl.searchParams.set("state", state);
+        return res.redirect(redirectUrl.toString());
+      } catch {
+        const delimiter = redirect_uri.includes("?") ? "&" : "?";
+        let target = `${redirect_uri}${delimiter}code=${encodeURIComponent(code)}`;
+        if (state) target += `&state=${encodeURIComponent(state)}`;
+        return res.redirect(target);
+      }
     }
 
     // CASE 2: Direct browser hit to /api/mcp (Show success & access token)
@@ -681,7 +817,7 @@ router.post(["/authorize", "/login"], async (req, res) => {
 });
 
 // POST /api/oauth/token and /api/mcp/token: Standard OAuth 2.0 Token Endpoint
-router.post("/token", async (req, res) => {
+const tokenHandler = async (req, res) => {
   try {
     const grantType = req.body.grant_type || req.query.grant_type;
 
@@ -689,11 +825,26 @@ router.post("/token", async (req, res) => {
     if (grantType === "authorization_code") {
       const code = req.body.code || req.query.code;
       if (!code || !authCodes.has(code)) {
-        return res.status(400).json({ error: "invalid_grant", error_description: "Invalid or expired authorization code." });
+        return res.status(400).json({
+          error: "invalid_grant",
+          error_description: "Invalid or expired authorization code.",
+        });
       }
 
       const codeData = authCodes.get(code);
       authCodes.delete(code); // single-use
+
+      // PKCE verification (RFC 7636)
+      const codeVerifier = req.body.code_verifier || req.query.code_verifier;
+      if (
+        codeData.codeChallenge &&
+        !verifyPkce(codeVerifier, codeData.codeChallenge, codeData.codeChallengeMethod)
+      ) {
+        return res.status(400).json({
+          error: "invalid_grant",
+          error_description: "PKCE verification failed.",
+        });
+      }
 
       const token = jwt.sign(
         { id: codeData.userId, displayName: codeData.displayName },
@@ -705,11 +856,41 @@ router.post("/token", async (req, res) => {
         access_token: token,
         token_type: "Bearer",
         expires_in: 30 * 24 * 60 * 60,
-        scope: "read write",
+        refresh_token: token,
+        scope: codeData.scope || "read write",
       });
     }
 
-    // Grant 2: Password credentials (convenience fallback)
+    // Grant 2: Refresh token
+    if (grantType === "refresh_token") {
+      const refreshToken = req.body.refresh_token || req.query.refresh_token;
+      if (!refreshToken) {
+        return res.status(400).json({ error: "invalid_grant", error_description: "Missing refresh_token." });
+      }
+      try {
+        const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+        const user = await User.findById(decoded.id);
+        if (!user) {
+          return res.status(400).json({ error: "invalid_grant", error_description: "User not found." });
+        }
+        const newToken = jwt.sign(
+          { id: user._id, displayName: user.displayName },
+          process.env.JWT_SECRET,
+          { expiresIn: "30d" }
+        );
+        return res.json({
+          access_token: newToken,
+          token_type: "Bearer",
+          expires_in: 30 * 24 * 60 * 60,
+          refresh_token: newToken,
+          scope: "read write",
+        });
+      } catch (err) {
+        return res.status(400).json({ error: "invalid_grant", error_description: "Invalid or expired refresh token." });
+      }
+    }
+
+    // Grant 3: Password credentials (convenience fallback)
     if (grantType === "password") {
       const username = req.body.username || req.body.name;
       const password = req.body.password || req.body.pin;
@@ -728,6 +909,7 @@ router.post("/token", async (req, res) => {
         access_token: token,
         token_type: "Bearer",
         expires_in: 30 * 24 * 60 * 60,
+        refresh_token: token,
         scope: "read write",
       });
     }
@@ -737,7 +919,9 @@ router.post("/token", async (req, res) => {
     console.error("Token endpoint error:", err);
     return res.status(500).json({ error: "server_error" });
   }
-});
+};
+
+router.post(["/token", "/api/mcp/token", "/api/oauth/token"], tokenHandler);
 
 // ============================================================================
 // MCP SERVER TRANSPORTS (Streamable HTTP & SSE)
@@ -748,11 +932,7 @@ router.post("/", async (req, res) => {
   try {
     const user = await authenticateRequest(req);
     if (!user) {
-      return res.status(401).json({
-        jsonrpc: "2.0",
-        error: { code: -32001, message: "Unauthorized. Please authenticate with OAuth or Bearer token." },
-        id: null,
-      });
+      return sendUnauthorized(res, req, "Unauthorized. Please authenticate with OAuth or Bearer token.");
     }
 
     // Ensure accept header allows text/event-stream per Streamable HTTP spec
@@ -788,7 +968,7 @@ router.get("/sse", async (req, res) => {
   try {
     const user = await authenticateRequest(req);
     if (!user) {
-      return res.status(401).send("Unauthorized. Bearer token required.");
+      return sendUnauthorized(res, req, "Unauthorized. Bearer token required.");
     }
 
     res.setHeader("Content-Type", "text/event-stream");
@@ -873,5 +1053,10 @@ router.get("/openapi.json", (req, res) => {
     },
   });
 });
+
+router.discoveryHandler = getDiscoveryMetadata;
+router.protectedResourceHandler = getProtectedResourceMetadata;
+router.registrationHandler = registrationHandler;
+router.tokenHandler = tokenHandler;
 
 module.exports = router;

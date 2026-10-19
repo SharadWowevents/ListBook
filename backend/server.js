@@ -17,6 +17,21 @@ app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 app.use(express.urlencoded({ extended: true }));
 
+// Discovery routes (RFC 8414 & RFC 9728)
+app.get("/.well-known/oauth-authorization-server*", mcpRoutes.discoveryHandler);
+app.get("/.well-known/oauth-protected-resource*", mcpRoutes.protectedResourceHandler);
+app.get("/.well-known/openid-configuration*", mcpRoutes.discoveryHandler);
+app.post("/register", mcpRoutes.registrationHandler);
+
+app.get("/api/.well-known/oauth-authorization-server*", mcpRoutes.discoveryHandler);
+app.get("/api/.well-known/oauth-protected-resource*", mcpRoutes.protectedResourceHandler);
+app.get("/api/.well-known/openid-configuration*", mcpRoutes.discoveryHandler);
+app.post("/api/register", mcpRoutes.registrationHandler);
+
+// Fallback token and authorize routes
+app.post(["/token", "/api/token"], mcpRoutes.tokenHandler);
+app.use(["/authorize", "/api/authorize"], mcpRoutes);
+
 // Routes
 app.use("/api/auth", authRoutes);
 app.use("/api/board", boardRoutes);
